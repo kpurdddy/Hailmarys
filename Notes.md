@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `tacfoot-rewrite.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -30,6 +30,17 @@
 
 ### Fallbacks Taken
 - None — hybrid camera shipped as designed.
+
+---
+
+## Alpha 2.1.1 — Hotfix (2026-02-22)
+- Follow camera zoom adjusted from /40 to /55 (less jarring, more field visible)
+- WR/TE carriers get "Run Upfield" move (HitTheHole type) — Sprint fatigue no longer a dead end
+- Defense tokens (Base 4-3) now visible on field during MENU/PLAY_SELECT
+- Jim emoji changed to 🦊 (fox) — overridden by SVG portrait
+- Game Over "Play Again" uses RESTART_GAME dispatch instead of page reload
+- Sound engine activated: snap, tackle, whistle+crowd on TD, sackBuzz
+- Coach SVG portraits on title screen (Jim: fat, walrus mustache, headset; Joey: sunglasses, smirk, earpiece)
 
 ---
 

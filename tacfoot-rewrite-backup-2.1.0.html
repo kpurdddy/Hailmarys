@@ -1837,7 +1837,6 @@ function getRunnerMoveLabels(carrierRole) {
   // WR or TE
   return [
     { label: 'Sprint', type: 'Sprint', description: 'Burst forward with speed' },
-    { label: 'Run Upfield', type: 'HitTheHole', description: 'Push forward through traffic' },
     { label: 'Cut Outside', type: 'CutOutside', description: 'Break to the sideline' },
     { label: 'Juke', type: 'Juke', description: 'Quick cut to evade' },
     { label: 'Dive Forward', type: 'DiveForward', description: 'Fall forward for safe yards' }
@@ -4224,7 +4223,7 @@ function GameField({ state, dispatch }) {
   const [instantCam, setInstantCam] = React.useState(false);
 
   // Dynamic yard-to-pixel ratio based on camera mode
-  const followYardPx = viewportHeight / 55;
+  const followYardPx = viewportHeight / 40;
   const yardPx = state.cameraMode === 'strategic' ? (viewportHeight / 120) : followYardPx;
   const totalFieldHeight = 120 * yardPx;
   const tokenScale = yardPx / YARD_PX;
@@ -4281,23 +4280,6 @@ function GameField({ state, dispatch }) {
       return () => clearTimeout(timer);
     }
   }, [state.cameraMode, state.phase]);
-
-  // Sound effects — triggered by phase transitions
-  React.useEffect(function() {
-    if (state.phase === 'SNAPPING') {
-      SoundEngine.play('snap');
-    }
-    if (state.phase === 'CONTACT') {
-      SoundEngine.play('tackle');
-    }
-    if (state.phase === 'TOUCHDOWN') {
-      SoundEngine.play('whistle');
-      setTimeout(function() { SoundEngine.play('crowd'); }, 300);
-    }
-    if (state.phase === 'RESULT' && state.resultText && state.resultText.includes('SACKED')) {
-      SoundEngine.play('sackBuzz');
-    }
-  }, [state.phase, state.resultText]);
 
   // Coordinate conversion helpers — all use dynamic yardPx
   function yardToPixelY(yardFromOwnGoal) {
@@ -4751,27 +4733,6 @@ function GameField({ state, dispatch }) {
             })
           );
         }
-
-        // Defense tokens (visual only — Base 4-3 default)
-        var fallbackDefense = DEFENSES[0].players; // base43
-        for (var di = 0; di < fallbackDefense.length; di++) {
-          var def = fallbackDefense[di];
-          var defPx = posToPixel(def.x, def.y);
-          playerTokens.push(
-            React.createElement(PlayerToken, {
-              key: 'fallback-def-' + def.id,
-              id: def.id,
-              role: def.role,
-              x: defPx.left,
-              y: defPx.top,
-              isBallCarrier: false,
-              isOffense: false,
-              label: '',
-              instant: true,
-              scale: tokenScale,
-            })
-          );
-        }
       }
     }
   }
@@ -5189,168 +5150,6 @@ function Scoreboard({ state, dispatch }) {
 // ============================================================
 // 2. TITLE SCREEN
 // ============================================================
-
-// Coach SVG Portraits
-function jimPortrait() {
-  return React.createElement('svg', { width: '100', height: '100', viewBox: '0 0 140 140' },
-    // Background circle
-    React.createElement('circle', { cx: '70', cy: '70', r: '68', fill: '#1a2e1a', stroke: '#22c55e', strokeWidth: '2' }),
-    // THICK neck
-    React.createElement('rect', { x: '40', y: '105', width: '60', height: '20', rx: '8', fill: '#b8906a' }),
-    React.createElement('path', { d: 'M44 110 Q70 108 96 110', stroke: '#a07a54', strokeWidth: '0.8', fill: 'none', opacity: '0.5' }),
-    React.createElement('path', { d: 'M46 114 Q70 112 94 114', stroke: '#a07a54', strokeWidth: '0.8', fill: 'none', opacity: '0.4' }),
-    // BIG ROUND FACE
-    React.createElement('ellipse', { cx: '70', cy: '72', rx: '38', ry: '36', fill: '#c49a72' }),
-    // Double chin
-    React.createElement('ellipse', { cx: '70', cy: '102', rx: '24', ry: '10', fill: '#b8906a' }),
-    React.createElement('path', { d: 'M50 98 Q70 108 90 98', stroke: '#a07a54', strokeWidth: '0.8', fill: 'none', opacity: '0.5' }),
-    React.createElement('path', { d: 'M46 94 Q70 100 94 94', stroke: '#a8845c', strokeWidth: '1', fill: 'none', opacity: '0.5' }),
-    // Puffy cheeks
-    React.createElement('ellipse', { cx: '42', cy: '74', rx: '10', ry: '8', fill: '#c9a078', opacity: '0.5' }),
-    React.createElement('ellipse', { cx: '98', cy: '74', rx: '10', ry: '8', fill: '#c9a078', opacity: '0.5' }),
-    // Age spots
-    React.createElement('circle', { cx: '38', cy: '62', r: '1.5', fill: '#a8845c', opacity: '0.4' }),
-    React.createElement('circle', { cx: '96', cy: '56', r: '1.2', fill: '#a8845c', opacity: '0.3' }),
-    React.createElement('circle', { cx: '42', cy: '82', r: '1.3', fill: '#a8845c', opacity: '0.35' }),
-    React.createElement('circle', { cx: '100', cy: '68', r: '1', fill: '#a8845c', opacity: '0.3' }),
-    // Small deep-set eyes
-    React.createElement('path', { d: 'M52 56 Q58 52 64 56', fill: '#b8906a', opacity: '0.6' }),
-    React.createElement('path', { d: 'M76 56 Q82 52 88 56', fill: '#b8906a', opacity: '0.6' }),
-    React.createElement('ellipse', { cx: '58', cy: '58', rx: '4', ry: '2.5', fill: '#ddd8c8' }),
-    React.createElement('ellipse', { cx: '82', cy: '58', rx: '4', ry: '2.5', fill: '#ddd8c8' }),
-    React.createElement('circle', { cx: '59', cy: '58', r: '1.8', fill: '#3a5a3a' }),
-    React.createElement('circle', { cx: '83', cy: '58', r: '1.8', fill: '#3a5a3a' }),
-    React.createElement('circle', { cx: '59.5', cy: '57.5', r: '0.5', fill: '#fff' }),
-    React.createElement('circle', { cx: '83.5', cy: '57.5', r: '0.5', fill: '#fff' }),
-    // Bags under eyes
-    React.createElement('path', { d: 'M52 61 Q58 64 64 61', stroke: '#a8845c', strokeWidth: '1.2', fill: 'none', opacity: '0.5' }),
-    React.createElement('path', { d: 'M76 61 Q82 64 88 61', stroke: '#a8845c', strokeWidth: '1.2', fill: 'none', opacity: '0.5' }),
-    // Bushy gray eyebrows
-    React.createElement('path', { d: 'M48 52 Q54 47 66 52', stroke: '#aaa', strokeWidth: '3.5', fill: 'none', strokeLinecap: 'round' }),
-    React.createElement('path', { d: 'M74 52 Q86 47 92 52', stroke: '#aaa', strokeWidth: '3.5', fill: 'none', strokeLinecap: 'round' }),
-    React.createElement('path', { d: 'M50 51 L48 48', stroke: '#bbb', strokeWidth: '0.8', opacity: '0.5' }),
-    React.createElement('path', { d: 'M90 51 L92 48', stroke: '#bbb', strokeWidth: '0.8', opacity: '0.5' }),
-    React.createElement('path', { d: 'M56 50 L55 47', stroke: '#bbb', strokeWidth: '0.6', opacity: '0.4' }),
-    // Big bulbous nose
-    React.createElement('path', { d: 'M66 56 Q62 66 58 72 Q64 76 70 76 Q76 76 82 72 Q78 66 74 56', fill: '#b08a64' }),
-    React.createElement('ellipse', { cx: '70', cy: '74', rx: '8', ry: '4', fill: '#b8906a', opacity: '0.5' }),
-    React.createElement('ellipse', { cx: '65', cy: '74', rx: '2.5', ry: '1.5', fill: '#906a4a', opacity: '0.4' }),
-    React.createElement('ellipse', { cx: '75', cy: '74', rx: '2.5', ry: '1.5', fill: '#906a4a', opacity: '0.4' }),
-    // THE WALRUS MUSTACHE
-    React.createElement('path', { d: 'M40 78 Q46 68 56 73 Q64 76 70 74 Q76 76 84 73 Q94 68 100 78 Q98 88 86 86 Q76 84 70 85 Q64 84 54 86 Q42 88 40 78Z', fill: '#b0b0b0' }),
-    React.createElement('path', { d: 'M42 80 Q52 72 62 76 Q66 77 70 76', stroke: '#8a8a8a', strokeWidth: '1.2', fill: 'none' }),
-    React.createElement('path', { d: 'M98 80 Q88 72 78 76 Q74 77 70 76', stroke: '#8a8a8a', strokeWidth: '1.2', fill: 'none' }),
-    // Walrus droop ends
-    React.createElement('path', { d: 'M40 78 Q36 82 34 86 Q33 90 36 90', stroke: '#9a9a9a', strokeWidth: '2.5', fill: 'none', strokeLinecap: 'round' }),
-    React.createElement('path', { d: 'M100 78 Q104 82 106 86 Q107 90 104 90', stroke: '#9a9a9a', strokeWidth: '2.5', fill: 'none', strokeLinecap: 'round' }),
-    React.createElement('path', { d: 'M34 88 L31 86', stroke: '#ccc', strokeWidth: '0.5', opacity: '0.4' }),
-    React.createElement('path', { d: 'M106 88 L109 86', stroke: '#ccc', strokeWidth: '0.5', opacity: '0.4' }),
-    // Mouth barely visible
-    React.createElement('path', { d: 'M58 88 Q70 86 82 88', stroke: '#906a4a', strokeWidth: '1', fill: 'none', opacity: '0.3' }),
-    // Forehead wrinkles
-    React.createElement('path', { d: 'M44 42 Q56 38 70 42 Q84 38 96 42', stroke: '#a8845c', strokeWidth: '0.8', fill: 'none', opacity: '0.5' }),
-    React.createElement('path', { d: 'M46 46 Q58 42 72 46 Q84 42 94 46', stroke: '#a8845c', strokeWidth: '0.7', fill: 'none', opacity: '0.4' }),
-    // Crow's feet
-    React.createElement('path', { d: 'M38 56 L44 54', stroke: '#a8845c', strokeWidth: '0.8', opacity: '0.5' }),
-    React.createElement('path', { d: 'M36 58 L43 57', stroke: '#a8845c', strokeWidth: '0.7', opacity: '0.4' }),
-    React.createElement('path', { d: 'M102 56 L96 54', stroke: '#a8845c', strokeWidth: '0.8', opacity: '0.5' }),
-    React.createElement('path', { d: 'M104 58 L97 57', stroke: '#a8845c', strokeWidth: '0.7', opacity: '0.4' }),
-    // Headset band
-    React.createElement('path', { d: 'M24 52 Q26 22 70 18 Q114 22 116 52', stroke: '#555', strokeWidth: '5', fill: 'none', strokeLinecap: 'round' }),
-    // Earpieces
-    React.createElement('rect', { x: '18', y: '48', width: '13', height: '20', rx: '4', fill: '#3a3a3a', stroke: '#555', strokeWidth: '1' }),
-    React.createElement('rect', { x: '20', y: '51', width: '9', height: '12', rx: '2', fill: '#2a2a2a' }),
-    React.createElement('rect', { x: '109', y: '48', width: '13', height: '20', rx: '4', fill: '#3a3a3a', stroke: '#555', strokeWidth: '1' }),
-    React.createElement('rect', { x: '111', y: '51', width: '9', height: '12', rx: '2', fill: '#2a2a2a' }),
-    // Mic boom
-    React.createElement('path', { d: 'M22 62 Q14 66 12 74 Q10 82 14 88 Q20 94 26 90', stroke: '#555', strokeWidth: '3', fill: 'none', strokeLinecap: 'round' }),
-    React.createElement('ellipse', { cx: '26', cy: '90', rx: '5', ry: '3.5', fill: '#3a3a3a', stroke: '#555', strokeWidth: '1' }),
-    React.createElement('circle', { cx: '25', cy: '90', r: '2', fill: '#2a2a2a' }),
-    // Gray hair at temples
-    React.createElement('path', { d: 'M34 46 Q28 40 30 34 Q32 30 36 32', fill: '#bbb', opacity: '0.6' }),
-    React.createElement('path', { d: 'M32 50 Q26 46 28 40', stroke: '#aaa', strokeWidth: '1.5', fill: 'none', opacity: '0.4' }),
-    React.createElement('path', { d: 'M106 46 Q112 40 110 34 Q108 30 104 32', fill: '#bbb', opacity: '0.6' }),
-    React.createElement('path', { d: 'M108 50 Q114 46 112 40', stroke: '#aaa', strokeWidth: '1.5', fill: 'none', opacity: '0.4' }),
-    // Cap
-    React.createElement('path', { d: 'M32 42 Q34 18 70 14 Q106 18 108 42 Q70 36 32 42Z', fill: '#2a5028' }),
-    React.createElement('path', { d: 'M28 42 Q70 48 112 42 Q110 34 70 32 Q30 34 28 42Z', fill: '#1a3818' }),
-    React.createElement('path', { d: 'M44 38 Q56 36 68 38 Q80 36 92 38', stroke: '#3a6030', strokeWidth: '1.5', fill: 'none', opacity: '0.3' })
-  );
-}
-
-function joeyPortrait() {
-  return React.createElement('svg', { width: '100', height: '100', viewBox: '0 0 140 140' },
-    // Background circle
-    React.createElement('circle', { cx: '70', cy: '70', r: '68', fill: '#1a1a2e', stroke: '#4a9eff', strokeWidth: '2' }),
-    // Neck
-    React.createElement('rect', { x: '56', y: '100', width: '28', height: '14', rx: '4', fill: '#d4a574' }),
-    // Face
-    React.createElement('ellipse', { cx: '70', cy: '70', rx: '28', ry: '32', fill: '#d4a574' }),
-    // Visor/Sunglasses
-    React.createElement('path', { d: 'M40 54 Q70 48 100 54 Q102 62 100 64 Q70 58 40 64 Q38 62 40 54Z', fill: '#1a1a2e', stroke: '#333', strokeWidth: '1' }),
-    // Glare
-    React.createElement('path', { d: 'M48 57 Q65 52 80 57', stroke: 'rgba(74,158,255,0.4)', strokeWidth: '1.5', fill: 'none' }),
-    // Second glare
-    React.createElement('path', { d: 'M52 60 Q65 56 78 60', stroke: 'rgba(74,158,255,0.15)', strokeWidth: '1', fill: 'none' }),
-    // Cocky smirk
-    React.createElement('path', { d: 'M50 82 Q58 86 70 88 Q82 86 88 80', stroke: '#fff', strokeWidth: '2.2', fill: 'none' }),
-    // Teeth
-    React.createElement('path', { d: 'M54 83 Q62 88 74 88 Q82 86 86 81', fill: '#fff', opacity: '0.85' }),
-    React.createElement('line', { x1: '60', y1: '84', x2: '60', y2: '88', stroke: '#d4a574', strokeWidth: '0.5' }),
-    React.createElement('line', { x1: '65', y1: '85', x2: '65', y2: '88', stroke: '#d4a574', strokeWidth: '0.5' }),
-    React.createElement('line', { x1: '70', y1: '86', x2: '70', y2: '88', stroke: '#d4a574', strokeWidth: '0.5' }),
-    React.createElement('line', { x1: '75', y1: '85', x2: '75', y2: '88', stroke: '#d4a574', strokeWidth: '0.5' }),
-    React.createElement('line', { x1: '80', y1: '84', x2: '80', y2: '86', stroke: '#d4a574', strokeWidth: '0.5' }),
-    // Dimple
-    React.createElement('path', { d: 'M88 78 Q90 80 89 82', stroke: '#b8906a', strokeWidth: '0.8', fill: 'none', opacity: '0.6' }),
-    // Nose
-    React.createElement('path', { d: 'M67 60 Q65 68 63 72 Q67 74 70 74 Q73 74 77 72 Q75 68 73 60', fill: '#c49560' }),
-    // Sharp jawline
-    React.createElement('path', { d: 'M46 80 Q52 98 70 100 Q88 98 94 80', stroke: '#c49560', strokeWidth: '1', fill: 'none' }),
-    // Chin dimple
-    React.createElement('ellipse', { cx: '70', cy: '96', rx: '2', ry: '1.5', fill: '#c09058', opacity: '0.4' }),
-    // Stubble
-    React.createElement('circle', { cx: '52', cy: '86', r: '0.6', fill: '#8a6a4a', opacity: '0.25' }),
-    React.createElement('circle', { cx: '54', cy: '88', r: '0.5', fill: '#8a6a4a', opacity: '0.25' }),
-    React.createElement('circle', { cx: '56', cy: '90', r: '0.6', fill: '#8a6a4a', opacity: '0.2' }),
-    React.createElement('circle', { cx: '50', cy: '90', r: '0.5', fill: '#8a6a4a', opacity: '0.2' }),
-    React.createElement('circle', { cx: '88', cy: '84', r: '0.6', fill: '#8a6a4a', opacity: '0.25' }),
-    React.createElement('circle', { cx: '86', cy: '86', r: '0.5', fill: '#8a6a4a', opacity: '0.25' }),
-    React.createElement('circle', { cx: '84', cy: '88', r: '0.6', fill: '#8a6a4a', opacity: '0.2' }),
-    React.createElement('circle', { cx: '90', cy: '88', r: '0.5', fill: '#8a6a4a', opacity: '0.2' }),
-    React.createElement('circle', { cx: '62', cy: '94', r: '0.5', fill: '#8a6a4a', opacity: '0.2' }),
-    React.createElement('circle', { cx: '66', cy: '96', r: '0.5', fill: '#8a6a4a', opacity: '0.15' }),
-    React.createElement('circle', { cx: '74', cy: '96', r: '0.5', fill: '#8a6a4a', opacity: '0.15' }),
-    React.createElement('circle', { cx: '78', cy: '94', r: '0.5', fill: '#8a6a4a', opacity: '0.2' }),
-    // Hair poking out
-    React.createElement('path', { d: 'M40 48 Q36 42 33 44 Q30 48 36 50', fill: '#3a2a1a' }),
-    React.createElement('path', { d: 'M38 46 Q34 40 32 42', stroke: '#3a2a1a', strokeWidth: '2', fill: 'none', strokeLinecap: 'round' }),
-    React.createElement('path', { d: 'M100 48 Q104 42 107 44 Q110 48 104 50', fill: '#3a2a1a' }),
-    React.createElement('path', { d: 'M102 46 Q106 40 108 42', stroke: '#3a2a1a', strokeWidth: '2', fill: 'none', strokeLinecap: 'round' }),
-    // Cap
-    React.createElement('path', { d: 'M34 48 Q38 24 70 22 Q102 24 106 48 Q70 42 34 48Z', fill: '#1a3060' }),
-    // Flat brim
-    React.createElement('path', { d: 'M28 48 Q70 54 112 46 Q108 38 70 38 Q32 38 28 48Z', fill: '#122448' }),
-    // Star logo
-    React.createElement('path', { d: 'M70 30 L72 36 L78 36 L73 40 L75 46 L70 42 L65 46 L67 40 L62 36 L68 36Z', fill: '#4a9eff', opacity: '0.7' }),
-    // Earpiece
-    React.createElement('circle', { cx: '100', cy: '62', r: '3.5', fill: '#222', stroke: '#444', strokeWidth: '0.8' }),
-    React.createElement('circle', { cx: '100', cy: '62', r: '1.5', fill: '#333' }),
-    // Cord
-    React.createElement('path', { d: 'M100 65 Q98 72 96 78 Q94 84 90 88', stroke: '#333', strokeWidth: '1', fill: 'none' }),
-    // Whistle on lanyard
-    React.createElement('path', { d: 'M70 100 Q68 106 62 108', stroke: '#888', strokeWidth: '1.5', fill: 'none' }),
-    React.createElement('ellipse', { cx: '60', cy: '109', rx: '4', ry: '3', fill: '#bbb', stroke: '#999', strokeWidth: '0.5' }),
-    // Whistle hole
-    React.createElement('circle', { cx: '58', cy: '109', r: '1', fill: '#888' }),
-    // Polo collar
-    React.createElement('path', { d: 'M50 98 Q56 102 62 100 L64 106 Q58 108 50 104Z', fill: '#1a3060' }),
-    React.createElement('path', { d: 'M90 98 Q84 102 78 100 L76 106 Q82 108 90 104Z', fill: '#1a3060' }),
-    // Popped collar
-    React.createElement('path', { d: 'M90 98 Q92 96 91 94', stroke: '#1a3060', strokeWidth: '2', fill: 'none' })
-  );
-}
-
 function TitleScreen({ dispatch }) {
   const [selectedCoach, setSelectedCoach] = React.useState(null);
 
@@ -5366,8 +5165,8 @@ function TitleScreen({ dispatch }) {
         maxWidth: '280px'
       }
     },
-      React.createElement('div', { style: { marginBottom: '6px' } },
-        name === 'joey' ? joeyPortrait() : jimPortrait()
+      React.createElement('div', { style: { fontSize: '28px', marginBottom: '6px' } },
+        name === 'joey' ? '\u{1F3C8}' : '\u{1F9E0}'
       ),
       React.createElement('h3', { style: { color: color, marginBottom: '4px' } },
         name === 'joey' ? 'Baby Boy Joey' : 'Grizzled Jim'
@@ -5402,7 +5201,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARY'S"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.1.1'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.1.0'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -6518,7 +6317,7 @@ function GameOverScreen({ state, dispatch }) {
       React.createElement('button', {
         className: 'btn btn-primary',
         onClick: function() {
-          dispatch({ type: 'RESTART_GAME' });
+          window.location.reload();
         },
         style: { width: '100%', padding: '14px', fontSize: '16px' }
       }, '\u{1F504} PLAY AGAIN')
