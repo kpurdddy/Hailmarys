@@ -29,7 +29,7 @@ body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacS
 .scoreboard .timeout-dot.active{background:#f5a623}
 
 /* Field */
-.field-viewport{width:100%;height:calc(100vh - 60px);min-height:400px;max-height:900px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px}
+.field-viewport{width:100%;height:calc(100vh - 140px);min-height:320px;max-height:700px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px}
 .field-container{position:relative;will-change:transform;transition:transform 0.4s ease}
 .field-container.instant-cam{transition:none}
 
@@ -218,20 +218,6 @@ svg.route-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-
 .w-full{width:100%}
 .text-center{text-align:center}
 .font-bold{font-weight:bold}
-
-/* Overlay panel */
-.overlay-panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:linear-gradient(0deg,rgba(10,10,20,0.97) 0%,rgba(10,10,20,0.95) 55%,rgba(10,10,20,0.8) 78%,rgba(10,10,20,0.4) 92%,transparent 100%);padding:10px 8px 10px;max-height:60%;overflow-y:auto}
-.overlay-panel .throw-target{padding:4px 6px}
-.overlay-panel .tgt-name{font-size:11px}
-.overlay-panel .tgt-detail{font-size:8px}
-.overlay-panel button{padding:6px 3px;font-size:10px}
-.overlay-panel > div{padding:6px 8px}
-@media (max-width:600px){
-.overlay-panel .throw-target{padding:3px 4px}
-.overlay-panel .tgt-name{font-size:10px}
-.overlay-panel .tgt-detail{font-size:7px}
-.overlay-panel button{padding:5px 2px;font-size:9px}
-}
 
 /* Animations */
 @keyframes ballFly{
@@ -2320,16 +2306,6 @@ function gameReducerCore(state, action) {
         advice = pickCoachAdvice(state.coach, 'presnap');
       }
 
-      // Override with primary receiver guidance if play has a designed target
-      if (state.coach && play.primary && play.type === 'pass') {
-        var primaryName = play.primary;
-        if (state.coach === 'joey') {
-          advice = 'This play is designed for ' + primaryName + '. Drop Back and throw to ' + primaryName + ' when they get open!';
-        } else {
-          advice = 'This play targets ' + primaryName + '. Drop Back to let the route develop, then look for ' + primaryName + '.';
-        }
-      }
-
       // Determine if matchup feedback should be shown
       let showMatchup = false;
       if (params.showMatchupFeedback === 'all') showMatchup = true;
@@ -4296,11 +4272,7 @@ function GameField({ state, dispatch }) {
     }
 
     const trackPixel = (110 - trackYard) * yardPx;
-    // Offset camera for overlay phases: put LOS in upper third, not center
-    var overlayPhases = ['DECISION', 'RUNNER', 'CONTACT'];
-    var isOverlay = overlayPhases.indexOf(state.phase) !== -1;
-    var cameraOffset = isOverlay ? viewportHeight * 0.2 : viewportHeight / 2;
-    const targetScroll = trackPixel - cameraOffset;
+    const targetScroll = trackPixel - viewportHeight / 2;
     const clampedScroll = Math.max(0, Math.min(totalFieldHeight - viewportHeight, targetScroll));
 
     fieldScrollRef.current.style.transform = 'translateY(' + (-clampedScroll) + 'px)';
@@ -5087,13 +5059,11 @@ function GameField({ state, dispatch }) {
   }
 
   // ---- DOWN & DISTANCE HUD ----
-  var isOverlayPhase = ['DECISION', 'RUNNER', 'CONTACT'].indexOf(state.phase) !== -1;
   const downDistHud = React.createElement('div', {
     className: 'hud-compact',
     style: {
       position: 'absolute',
-      bottom: isOverlayPhase ? undefined : 0,
-      top: isOverlayPhase ? 0 : undefined,
+      bottom: 0,
       left: 0,
       right: 0,
       background: 'rgba(0,0,0,0.85)',
@@ -5210,7 +5180,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARY'S v2.2.2" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARY'S v2.2.1"),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5444,7 +5414,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARY'S"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.2'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.1'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5729,7 +5699,7 @@ function DecisionScreen({ state, dispatch }) {
     const throwResult = calculateThrowResult(rk, openness.level, pocketNum, state.currentPhase, state.difficulty);
     const hitPct = Math.round(((throwResult.details ? throwResult.details.completionPct : 0) || 0) * 100);
     const intPct = Math.round(((throwResult.details ? throwResult.details.intChance : 0) || 0) * 100);
-    var primaryReceiver = play && play.primary === rk;
+    const primaryReceiver = rk === bestKey;
 
     if (openness.level > bestOpenness) {
       bestOpenness = openness.level;
@@ -6875,21 +6845,10 @@ function App() {
     }
   }, '\u2630');
 
-  var isOverlayPhase = (phase === 'DECISION' || phase === 'RUNNER' || phase === 'CONTACT');
-
   return React.createElement('div', { className: 'game-container' },
     React.createElement(Scoreboard, { state: state, dispatch: dispatch }),
-    isOverlayPhase
-      ? React.createElement('div', {
-          style: { position: 'relative', width: '100%' }
-        },
-          React.createElement(GameField, { state: state, dispatch: dispatch }),
-          React.createElement('div', { className: 'overlay-panel' }, panelContent)
-        )
-      : React.createElement(React.Fragment, null,
-          React.createElement(GameField, { state: state, dispatch: dispatch }),
-          panelContent
-        ),
+    React.createElement(GameField, { state: state, dispatch: dispatch }),
+    panelContent,
     state.showCommentary && phase !== 'RESULT'
       ? React.createElement(CommentaryOverlay, { state: state, dispatch: dispatch })
       : null,

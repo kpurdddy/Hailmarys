@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `tacfoot-rewrite.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -12,6 +12,21 @@
 - Camera mode (`strategic` / `follow`) stored as explicit state field
 - CSS class-based transitions only
 - Pure functions for all game logic
+
+---
+
+## Alpha 2.2.2 — 2026-02-22
+
+### What Changed
+1. **Overlay Panel Layout:** DECISION, RUNNER, and CONTACT phases now render their panel content as an overlay on the bottom of the field viewport instead of below the field in document flow. Uses absolute positioning with a gradient fade background (`overlay-panel` class). Non-overlay phases (MENU, PLAY_SELECT, PRESNAP, RESULT, etc.) unchanged.
+2. **Compact Overlay Styling:** Receiver cards (`.throw-target`, `.tgt-name`, `.tgt-detail`) and buttons are smaller inside the overlay panel. Additional mobile compression at `max-width: 600px`.
+3. **Field Viewport Expansion:** `.field-viewport` height changed from `calc(100vh - 140px)` to `calc(100vh - 60px)`, min-height 320→400px, max-height 700→900px. Field fills more of the screen since the panel is overlaid, not stacked.
+4. **HUD Collision Fix:** Down & distance HUD (`downDistHud`) moves to `top: 0` during DECISION/RUNNER/CONTACT phases so it's not hidden behind the overlay. Stays at `bottom: 0` during all other phases.
+5. **Camera Framing for Overlay:** Camera offset changed during overlay phases — LOS positioned at 20% from top of viewport instead of centered. Keeps the action visible above the overlay panel.
+6. **Primary Receiver Highlight Fix:** `primaryReceiver` now compares against `play.primary` (the play's designed target) instead of `bestKey` (most-open receiver). Gold border and "INTENDED" badge now correctly display.
+7. **Coach Advice References Primary:** For pass plays with a primary target, coach advice now mentions the receiver name (e.g., "This play targets W1."). Joey and Jim have distinct phrasing. Run plays and `primary: null` still get generic advice.
+8. **Difficulty Label on Scoreboard:** Difficulty name (e.g., "PRESEASON") displayed next to version string in the scoreboard.
+9. **Version Strings:** Updated to v2.2.2 in both scoreboard and title screen.
 
 ---
 
