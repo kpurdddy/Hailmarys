@@ -41,7 +41,7 @@ body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacS
 /* Turf */
 .field-turf{position:absolute;width:100%}
 .yard-band{position:absolute;width:100%}
-.yard-band.even{background:#42B554}
+.yard-band.even{background:#38A84A}
 .yard-band.odd{background:#4CC95C}
 
 /* Yard lines */
@@ -624,7 +624,7 @@ const DIFFICULTY_PARAMS = {
     groundingRisk: 0.50,      // ~50%
     cpuScoringMult: 0.8,      // base odds x0.8
     audibleLimit: Infinity,   // unlimited
-    fumbleMultiplier: 0.10,   // 10% multiplier
+    fumbleMultiplier: 0.30,   // 30% multiplier
     trickFumbleMult: 0.30,    // ~2.4% on 8% base
     blitzSackChance: 0.05,    // 5%
     autoSackWarnings: 2,      // auto-sack after 2 tuck warnings
@@ -1181,17 +1181,9 @@ const SoundEngine = {
   ctx: null,
   muted: false,
 
-  _ensureCtx: function() {
+  _ensureCtx() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      // Force unlock for strict browsers (Safari/iOS)
-      var osc = this.ctx.createOscillator();
-      var gain = this.ctx.createGain();
-      gain.gain.value = 0;
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(0);
-      osc.stop(0.01);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
@@ -1576,9 +1568,9 @@ function resolveContact(moveType, carrierKey, tacklesBroken, difficulty) {
   const attrs = PLAYER_ATTRS[carrierKey] || { skill: 5, str: 5, spd: 6 };
   const params = DIFFICULTY_PARAMS[difficulty];
 
-  // Dive forward always ends the play safely (tackle, not break)
+  // Dive forward always breaks free
   if (moveType === 'DiveForward') {
-    return { result: 'tackle', yards: 1 + Math.floor(Math.random() * 3), fumble: false };
+    return { result: 'break', yards: 1 + Math.floor(Math.random() * 3), fumble: false };
   }
 
   // Calculate break chance base
@@ -2232,12 +2224,10 @@ function gameReducerCore(state, action) {
         const startPos = formation[rk];
         if (startPos && route) {
           const routeWP = buildRoute(route, startPos.x, startPos.y);
-          const absoluteWP = routeWP.map(function(wp) {
-            return {
-              x: Math.max(2, Math.min(98, startPos.x + wp.x)),
-              y: Math.min(110, startPos.y + wp.y)
-            };
-          });
+          const absoluteWP = routeWP.map(wp => ({
+            x: startPos.x + wp.x,
+            y: startPos.y + wp.y
+          }));
           waypoints[rk] = absoluteWP;
         }
       }
@@ -2252,49 +2242,6 @@ function gameReducerCore(state, action) {
 
       // Defense positions (relative to LOS: y values are already relative)
       const defPos = defObj ? defObj.players.map(p => ({ ...p })) : [];
-
-      // Assign DBs to receivers using greedy proximity
-      var assignableReceivers = [];
-      for (var ark = 0; ark < receiverKeys.length; ark++) {
-        if (recPos[receiverKeys[ark]]) {
-          assignableReceivers.push(receiverKeys[ark]);
-        }
-      }
-
-      var takenReceivers = {};
-      var dbXScaleAssign = 0.53;
-
-      // Collect all DBs
-      var dbPlayers = [];
-      for (var di = 0; di < defPos.length; di++) {
-        if (defPos[di].role === 'CB' || defPos[di].role === 'S') {
-          dbPlayers.push(defPos[di]);
-        }
-      }
-
-      // Greedy proximity: for each DB, find closest unassigned receiver
-      for (var ai = 0; ai < dbPlayers.length; ai++) {
-        var bestKey = null;
-        var bestDist = Infinity;
-        for (var ri = 0; ri < assignableReceivers.length; ri++) {
-          var rk = assignableReceivers[ri];
-          if (takenReceivers[rk]) continue;
-          var rPos = recPos[rk];
-          var ddx = (rPos.x - dbPlayers[ai].x) * dbXScaleAssign;
-          var ddy = rPos.y - dbPlayers[ai].y;
-          var dd = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (dd < bestDist) {
-            bestDist = dd;
-            bestKey = rk;
-          }
-        }
-        if (bestKey) {
-          dbPlayers[ai].assignedReceiver = bestKey;
-          takenReceivers[bestKey] = true;
-        } else {
-          dbPlayers[ai].assignedReceiver = null;
-        }
-      }
 
       // Matchup feedback and coach advice
       const matchupRating = getMatchupRating(play.id, defense);
@@ -2713,31 +2660,34 @@ function gameReducerCore(state, action) {
         }
       }
 
-      // Update DB positions: assignment-based coverage
+      // Update DB positions: track toward nearest receiver
       const dbTracking = params.dbTracking;
       const dbXScale = 0.53;
       for (let i = 0; i < newDefPos.length; i++) {
         const d = newDefPos[i];
         if (d.role === 'CB' || d.role === 'S') {
-          if (d.assignedReceiver && newRecPos[d.assignedReceiver]) {
-            // Man coverage: track assigned receiver
-            var target = newRecPos[d.assignedReceiver];
-            var dx = (target.x - d.x) * dbXScale;
-            var dy = target.y - d.y;
-            var dist = Math.sqrt(dx * dx + dy * dy);
+          // Find nearest receiver
+          let nearestRecKey = null;
+          let nearestDist = Infinity;
+          for (const rk of receiverKeys) {
+            if (newRecPos[rk]) {
+              const dx = (newRecPos[rk].x - d.x) * dbXScale;
+              const dy = newRecPos[rk].y - d.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < nearestDist) {
+                nearestDist = dist;
+                nearestRecKey = rk;
+              }
+            }
+          }
+          if (nearestRecKey && newRecPos[nearestRecKey]) {
+            const target = newRecPos[nearestRecKey];
+            const dx = (target.x - d.x) * dbXScale;
+            const dy = target.y - d.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist > 0.5) {
               d.x += (dx / dist) * dbTracking * 5 / dbXScale;
               d.y += (dy / dist) * dbTracking * 5;
-            }
-          } else {
-            // Zone: drift laterally toward QB's x, hold depth
-            var qbDx = newQBXY.x - d.x;
-            if (Math.abs(qbDx) > 2) {
-              d.x += (qbDx > 0 ? 1 : -1) * 0.5;
-            }
-            // Slight forward creep (toward LOS) but don't abandon deep zone
-            if (d.y > 10) {
-              d.y -= 0.2;
             }
           }
         }
@@ -2767,7 +2717,7 @@ function gameReducerCore(state, action) {
               }
               avgInt = intSum / updatedHoldData.length;
             }
-            var dlSpeed = 0.8 + (1.0 - (avgInt / 100)) * 3.0;
+            var dlSpeed = 0.8 + (1.0 - avgInt) * 3.0;
             d.x += (dlDx / dlDist) * dlSpeed / dbXScale;
             d.y += (dlDy / dlDist) * dlSpeed;
           }
@@ -3194,26 +3144,6 @@ function gameReducerCore(state, action) {
       // Clamp carrier X
       newCarrierXY.x = Math.max(1, Math.min(99, newCarrierXY.x));
 
-      // Check touchdown (before OOB — pylon dive should score)
-      const absoluteY = state.ballPos + newCarrierXY.y;
-      if (absoluteY >= 100) {
-        const totalYards = 100 - state.ballPos;
-        const playName = play ? play.name : 'play';
-        const defName = state.chosenDefense || 'base43';
-        const comm = pickCommentary('touchdown', { play: playName, def: defName, yards: totalYards });
-        return {
-          ...state,
-          phase: 'TOUCHDOWN',
-          carrierXY: newCarrierXY,
-          lastResult: { type: 'touchdown', yards: totalYards, turnover: false },
-          resultText: 'TOUCHDOWN!',
-          resultColor: 'gold',
-          showCommentary: true,
-          danComment: comm.dan,
-          kikiComment: comm.kiki,
-        };
-      }
-
       // Check out of bounds
       if (newCarrierXY.x <= 1 || newCarrierXY.x >= 99) {
         const totalYards = Math.round(newCarrierXY.y);
@@ -3233,6 +3163,26 @@ function gameReducerCore(state, action) {
           kikiComment: comm.kiki,
           runMoves: newRunMoves,
           yacMoves: newYacMoves,
+        };
+      }
+
+      // Check touchdown
+      const absoluteY = state.ballPos + newCarrierXY.y;
+      if (absoluteY >= 100) {
+        const totalYards = 100 - state.ballPos;
+        const playName = play ? play.name : 'play';
+        const defName = state.chosenDefense || 'base43';
+        const comm = pickCommentary('touchdown', { play: playName, def: defName, yards: totalYards });
+        return {
+          ...state,
+          phase: 'TOUCHDOWN',
+          carrierXY: newCarrierXY,
+          lastResult: { type: 'touchdown', yards: totalYards, turnover: false },
+          resultText: 'TOUCHDOWN!',
+          resultColor: 'gold',
+          showCommentary: true,
+          danComment: comm.dan,
+          kikiComment: comm.kiki,
         };
       }
 
@@ -3335,25 +3285,6 @@ function gameReducerCore(state, action) {
       const moveType = action.moveType;
       const play = PLAYS.find(p => p.id === state.selectedPlayId);
       const params = DIFFICULTY_PARAMS[state.difficulty];
-
-      // Force tackle after 2 contacts — no more chain
-      if (state.tacklesBroken >= 2) {
-        var totalYards2 = Math.round(state.carrierXY.y);
-        var playName2 = play ? play.name : 'play';
-        var defName2 = state.chosenDefense || 'base43';
-        var commCat2 = totalYards2 >= 10 ? 'bigRun' : (totalYards2 > 0 ? 'shortRun' : 'runStuffed');
-        var comm2 = pickCommentary(commCat2, { yards: totalYards2, play: playName2, def: defName2 });
-        return {
-          ...state,
-          phase: 'RESULT',
-          lastResult: { type: 'tackle', yards: totalYards2, turnover: false },
-          resultText: 'Brought down! ' + (totalYards2 > 0 ? 'Gain of ' + totalYards2 + ' yards.' : 'No gain.'),
-          resultColor: totalYards2 >= 5 ? '#22c55e' : (totalYards2 > 0 ? '#eab308' : '#ef4444'),
-          showCommentary: true,
-          danComment: comm2.dan,
-          kikiComment: comm2.kiki,
-        };
-      }
 
       // Map display labels to internal types
       let internalType = moveType;
@@ -4880,12 +4811,10 @@ function GameField({ state, dispatch }) {
 
         // Generate waypoints on-the-fly (same logic as SELECT_PLAY)
         const routeWP = buildRoute(route, startPos.x, startPos.y);
-        const absoluteWP = routeWP.map(function(wp) {
-          return {
-            x: Math.max(2, Math.min(98, startPos.x + wp.x)),
-            y: Math.min(110, startPos.y + wp.y)
-          };
-        });
+        const absoluteWP = routeWP.map(wp => ({
+          x: startPos.x + wp.x,
+          y: startPos.y + wp.y
+        }));
 
         const startPx = posToPixel(startPos.x, startPos.y);
         let pathData = 'M ' + startPx.left + ' ' + startPx.top;
@@ -5180,7 +5109,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARY'S v2.2.1"),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARY'S v2.2.0"),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5414,7 +5343,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARY'S"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.1'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.0'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5451,7 +5380,6 @@ function TitleScreen({ dispatch }) {
         React.createElement('button', {
           className: 'btn',
           onClick: function() {
-            SoundEngine._ensureCtx();
             dispatch({ type: 'START_GAME', twoPlayerMode: true });
           },
           style: { background: '#7c3aed', width: '100%', padding: '14px' }
@@ -5647,7 +5575,7 @@ function PresnapScreen({ state, dispatch }) {
     React.createElement('div', { style: { display: 'flex', gap: '8px', marginTop: '10px' } },
       React.createElement('button', {
         className: 'btn btn-success',
-        onClick: function() { SoundEngine._ensureCtx(); SoundEngine.play('snap'); dispatch({ type: 'SNAP' }); },
+        onClick: function() { SoundEngine._ensureCtx(); dispatch({ type: 'SNAP' }); },
         style: { flex: 2, padding: '14px', fontSize: '18px' }
       }, '\u{1F3C8} SNAP'),
       React.createElement('button', {
@@ -6683,11 +6611,14 @@ function App() {
     }
   }, [state.phase, state.isPaused]);
 
-  // Commentary delay: auto-dismiss commentary 2750ms after entering RESULT
+  // Commentary delay: show commentary 2750ms after entering RESULT
   React.useEffect(function() {
-    if (state.phase === 'RESULT' && state.danComment && state.showCommentary) {
-      var timer = setTimeout(function() {
-        dispatch({ type: 'DISMISS_COMMENTARY' });
+    if (state.phase === 'RESULT' && state.danComment && !state.showCommentary) {
+      const timer = setTimeout(function() {
+        dispatch({ type: 'DISMISS_COMMENTARY' }); // This won't help; we need a SET action
+        // Actually we just need to trigger the overlay. The reducer already sets showCommentary.
+        // If the state already has showCommentary true from the reducer, we skip.
+        // If it doesn't, we need a way to set it. Let's use a local state approach.
       }, 2750);
       return function() { clearTimeout(timer); };
     }

@@ -33,6 +33,39 @@
 
 ---
 
+## Alpha 2.2.1 — 2026-02-22
+
+### What Changed
+1. **Sound Fixes (3):** Added `SoundEngine._ensureCtx()` to 2-Player Mode button onClick. Added silent oscillator unlock in `_ensureCtx()` for Safari/iOS compatibility. Moved `SoundEngine.play('snap')` directly into SNAP button onClick for user-gesture context.
+2. **Route Waypoint Clamping:** Waypoints clamped to `x: [2, 98]` and `y: max 110` in both SELECT_PLAY and ghost route preview. Prevents routes/tokens from extending past sidelines.
+3. **Field Stripe Colors:** Dark stripe changed from `#38A84A` to `#42B554`. Narrower contrast gap between even/odd bands.
+4. **Commentary Auto-Dismiss Fix:** Fixed useEffect condition from `!state.showCommentary` to `state.showCommentary` so the 2750ms dismiss timer actually fires.
+5. **TD vs OOB Priority:** Touchdown check moved before out-of-bounds check in RUNNER_MOVE. Pylon dives now score instead of being ruled OOB.
+6. **DB Assignment-Based Coverage:** Greedy proximity algorithm assigns each DB to a specific receiver at snap time. Man-assigned DBs track their receiver; extra DBs (nickel) play zone (drift toward QB x, hold depth). Eliminates double-coverage stacking bug.
+7. **Preseason Fumble Multiplier:** Reduced from 0.30 to 0.10. First-contact fumbles now ~0.5%.
+8. **Contact Limit (Max 2) + Dive Ends Play:** Auto-tackle after 2 broken contacts (no 3rd CONTACT screen). `resolveContact` returns `'tackle'` for DiveForward (was `'break'`), ending the play with safe 1-3 yards.
+9. **DL Speed Formula Fix:** Fixed pocket integrity scale from 0-1 to 0-100 (`avgInt / 100`). DL no longer fly backward at snap.
+10. **Version Strings:** Updated to v2.2.1.
+
+### Backup
+- `index-2.2.0-backup.html` (pre-2.2.1)
+
+---
+
+## Alpha 2.2.0 — 2026-02-22
+
+### What Changed
+1. **Decision Phase Now Turn-Based (Critical Fix):** Removed all gameplay movement from ANIMATION_TICK during DECISION/RPO_READ phases. The field is now completely frozen between player actions. Each button press advances one step of movement for QB, receivers, DBs, DL, and LBs via the QB_ACTION handler. DL press (0.8 + 3.0 scaling by pocket decay) and LB drift (0.4y per action) added to QB_ACTION. RUNNER/CONTACT phases remain real-time on the 200ms timer. `tickPhases` array reduced to `['RUNNER', 'CONTACT']`.
+2. **Play Again Preserves Settings:** RESTART_GAME now preserves coach, difficulty, and twoPlayerMode instead of wiping to full INITIAL_STATE. Returns to MENU phase (play selection) instead of TITLE.
+3. **AudioContext Unlock:** Added `SoundEngine._ensureCtx()` calls in the START_GAME difficulty button and SNAP button onClick handlers — both are user gesture contexts where browsers allow AudioContext creation.
+4. **Version Strings Updated:** Scoreboard → "HAIL MARY'S v2.2.0", title screen → "ALPHA v2.2.0".
+5. **Brighter Field Stripes:** Yard band colors changed from `#2E8B3E`/`#3CAE4C` to `#38A84A`/`#4CC95C` — brighter, more saturated stadium greens.
+
+### Backup
+- `index-2.1.1-backup.html` (pre-2.2.0)
+
+---
+
 ## Alpha 2.1.1 — Hotfix (2026-02-22)
 - Follow camera zoom adjusted from /40 to /55 (less jarring, more field visible)
 - WR/TE carriers get "Run Upfield" move (HitTheHole type) — Sprint fatigue no longer a dead end
