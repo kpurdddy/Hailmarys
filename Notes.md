@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `tacfoot-rewrite.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -30,6 +30,24 @@
 
 ### Fallbacks Taken
 - None — hybrid camera shipped as designed.
+
+---
+
+## Alpha 2.1.0 — 2026-02-22
+
+### What Changed
+1. **Double-Offset Teleport Fixed:** QB_ACTION no longer adds formation offset to already-absolute waypoints. Receivers move smoothly along routes during drop back.
+2. **Audible Preserves Defense:** Audibling keeps the defense you read instead of re-rolling. chosenDefense cleared on all play-ending transitions to prevent "Forever Defense" lock-in.
+3. **Defense Plain English Names:** All 5 defenses display cause-and-effect explanations alongside the real football term on PresnapScreen. Not on the floating defBadge.
+4. **Sprint Fatigue:** 2 sprints per play. ⚡⚡ indicator depletes with use. Exhausted sprint button dims and shows red "FATIGUED" overlay. Creates resource tension in RUNNER phase.
+5. **Defender Speed Tuning — DECISION Swarm Fixed:** DL press now tied to pocket integrity (slow when pocket is healthy, fast when collapsing). DBs shadow at ~35% speed during DECISION. LBs hold position. RUNNER pursuit unchanged (fast and scary).
+6. **Title Screen Description:** Game description added below logo. Communicates genre and newcomer-friendliness.
+7. **Title Screen Feedback Link:** Google Form link for player feedback (placeholder URL).
+8. **Menu Button:** Pause/menu as modal overlay (isPaused boolean, not phase change) with Resume, Restart, and Quit options. ANIMATION_TICK pauses when isPaused is true.
+9. **Follow Camera Fixed:** Follow mode now uses dynamic viewport-based zoom (viewportHeight/40) instead of hardcoded 8px/yard. Field no longer cuts off at half screen.
+
+### Backup
+- `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0)
 
 ---
 
