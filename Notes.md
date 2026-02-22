@@ -1,8 +1,8 @@
-# Hail Mary's — Rewrite Notes
+# Hail Marys — Rewrite Notes
 
 ## File
-- **Game:** `tacfoot-rewrite.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2)
+- **Game:** `index.html` (single file)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -12,6 +12,32 @@
 - Camera mode (`strategic` / `follow`) stored as explicit state field
 - CSS class-based transitions only
 - Pure functions for all game logic
+
+---
+
+## Alpha 2.2.3 — Layout Fixes + TD Celebration + Name Fix (2026-02-22)
+- BUGFIX: Body scroll locked — changed html,body height:100% to min-height:100vh
+- BUGFIX: Field viewport too tall on non-overlay phases, pushing panels off-screen
+  - Base: calc(100vh - 180px), max-height 600px
+  - Overlay phases (.overlay-active): calc(100vh - 60px), max-height 900px
+- BUGFIX: Camera bottom clamp prevented LOS from reaching top of screen when backed up
+  - Added overlay-phase clamp expansion (+ 60% viewport height of extra scroll room)
+  - Camera offset bumped from 0.2 to 0.35
+- DECISION panel compressed from 6 rows to 4:
+  - Removed "QB DECISION" header row
+  - Receiver cards forced to single row of 4 (was 2x2 grid)
+  - Movement buttons (4) and Look buttons (2) merged into single row of 6
+  - Escape buttons (3) tightened
+  - Overlay max-height reduced from 60% to 50%
+- RUNNER/CONTACT button padding reduced from 12px 8px to 8px 4px for overlay fit
+- TD celebration upgraded:
+  - Gold screen flash on entry
+  - 3 staggered firework bursts (left/center/right) replacing single burst
+  - 35-piece confetti rain with flutter/tumble animation
+  - Score countup +0 to +7 with pop at end
+  - Bigger text bounce (scale 1.4 overshoot)
+- Renamed "Hail Mary's" to "Hail Marys" (no apostrophe) everywhere
+- Version strings updated to v2.2.3
 
 ---
 

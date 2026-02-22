@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Hail Marys</title>
+<title>Hail Mary's</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;min-height:100vh;overflow-x:hidden}
+html,body{width:100%;height:100%;overflow-x:hidden}
 body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.4}
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-track{background:#111}
@@ -29,8 +29,7 @@ body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacS
 .scoreboard .timeout-dot.active{background:#f5a623}
 
 /* Field */
-.field-viewport{width:100%;height:calc(100vh - 180px);min-height:400px;max-height:600px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px}
-.field-viewport.overlay-active{height:calc(100vh - 60px);max-height:900px}
+.field-viewport{width:100%;height:calc(100vh - 60px);min-height:400px;max-height:900px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px}
 .field-container{position:relative;will-change:transform;transition:transform 0.4s ease}
 .field-container.instant-cam{transition:none}
 
@@ -123,7 +122,7 @@ body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacS
 
 /* Decision panel */
 .decision-panel{padding:12px}
-.decision-panel .targets-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px}
+.decision-panel .targets-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
 .throw-target{background:#1a1a2e;border:2px solid #333;border-radius:8px;padding:10px;cursor:pointer;transition:all 0.2s;text-align:center}
 .throw-target:hover{background:#252540;transform:scale(1.02)}
 .throw-target.open-wide{border-color:#22c55e}
@@ -221,12 +220,11 @@ svg.route-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-
 .font-bold{font-weight:bold}
 
 /* Overlay panel */
-.overlay-panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:linear-gradient(0deg,rgba(10,10,20,0.97) 0%,rgba(10,10,20,0.95) 55%,rgba(10,10,20,0.8) 78%,rgba(10,10,20,0.4) 92%,transparent 100%);padding:10px 8px 10px;max-height:50%;overflow-y:auto}
+.overlay-panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:linear-gradient(0deg,rgba(10,10,20,0.97) 0%,rgba(10,10,20,0.95) 55%,rgba(10,10,20,0.8) 78%,rgba(10,10,20,0.4) 92%,transparent 100%);padding:10px 8px 10px;max-height:60%;overflow-y:auto}
 .overlay-panel .throw-target{padding:4px 6px}
 .overlay-panel .tgt-name{font-size:11px}
 .overlay-panel .tgt-detail{font-size:8px}
 .overlay-panel button{padding:6px 3px;font-size:10px}
-.overlay-panel .action-buttons button{font-size:9px;padding:5px 2px}
 .overlay-panel > div{padding:6px 8px}
 @media (max-width:600px){
 .overlay-panel .throw-target{padding:3px 4px}
@@ -249,24 +247,9 @@ svg.route-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-
   0%{transform:translate(0,0) scale(1);opacity:1}
   100%{transform:translate(var(--dx),var(--dy)) scale(0);opacity:0}
 }
-@keyframes confettiFall{
-  0%{transform:translateY(-10px) rotateZ(0deg);opacity:1}
-  100%{transform:translateY(100vh) rotateZ(720deg);opacity:0}
-}
-@keyframes tdFlash{
-  0%{background:rgba(255,215,0,0.4)}
-  100%{background:rgba(0,0,0,0.85)}
-}
-@keyframes scoreCountPulse{
-  0%{transform:scale(1)}
-  50%{transform:scale(1.15)}
-  100%{transform:scale(1)}
-}
-.confetti-piece{position:absolute;top:-16px;opacity:0.9;animation:confettiFall linear forwards}
-.overlay-screen.td-flash{animation:tdFlash 0.35s ease-out forwards}
 @keyframes tdBounce{
   0%{transform:scale(0)}
-  50%{transform:scale(1.4)}
+  50%{transform:scale(1.3)}
   100%{transform:scale(1)}
 }
 @keyframes tdGlow{
@@ -4316,10 +4299,9 @@ function GameField({ state, dispatch }) {
     // Offset camera for overlay phases: put LOS in upper third, not center
     var overlayPhases = ['DECISION', 'RUNNER', 'CONTACT'];
     var isOverlay = overlayPhases.indexOf(state.phase) !== -1;
-    var cameraOffset = isOverlay ? viewportHeight * 0.35 : viewportHeight / 2;
-    var targetScroll = trackPixel - cameraOffset;
-    var bottomClamp = isOverlay ? (totalFieldHeight - viewportHeight + viewportHeight * 0.6) : (totalFieldHeight - viewportHeight);
-    var clampedScroll = Math.max(0, Math.min(bottomClamp, targetScroll));
+    var cameraOffset = isOverlay ? viewportHeight * 0.2 : viewportHeight / 2;
+    const targetScroll = trackPixel - cameraOffset;
+    const clampedScroll = Math.max(0, Math.min(totalFieldHeight - viewportHeight, targetScroll));
 
     fieldScrollRef.current.style.transform = 'translateY(' + (-clampedScroll) + 'px)';
   }, [state.cameraMode, state.ballPos, state.phase, state.carrierXY, state.ballInFlight, state.ballFlightTarget]);
@@ -5193,7 +5175,7 @@ function GameField({ state, dispatch }) {
 
   return React.createElement('div', {
     ref: viewportRef,
-    className: 'field-viewport' + (isContact ? ' contact-screen' : '') + (['DECISION', 'RUNNER', 'CONTACT'].indexOf(state.phase) !== -1 ? ' overlay-active' : ''),
+    className: 'field-viewport' + (isContact ? ' contact-screen' : ''),
   },
     fieldContainer,
     downDistHud,
@@ -5228,7 +5210,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.3" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARY'S v2.2.2" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5461,8 +5443,8 @@ function TitleScreen({ dispatch }) {
         WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
         marginBottom: '8px'
       }
-    }, "HAIL MARYS"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.3'),
+    }, "HAIL MARY'S"),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.2'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5801,34 +5783,51 @@ function DecisionScreen({ state, dispatch }) {
     );
   }
 
-  // Action buttons — movement + look merged into one row
-  var moveLookRow = [];
-  var escapeRow = [];
+  // Action buttons
+  const actionRow1 = [];
+  const actionRow2 = [];
+  const actionRow3 = [];
 
   if (!survivalMode) {
-    var allMoveButtons = [
+    const moveButtons1 = [
       { label: 'Drop Back', move: 'dropBack', color: '#3b82f6' },
       { label: 'Roll Left', move: 'rollLeft', color: '#6366f1' },
       { label: 'Roll Right', move: 'rollRight', color: '#6366f1' },
-      { label: 'Step Up', move: 'stepUp', color: '#3b82f6' },
-      { label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' },
-      { label: 'Look Right', move: 'lookRight', color: '#8b5cf6' }
+      { label: 'Step Up', move: 'stepUp', color: '#3b82f6' }
     ];
-    for (var mi = 0; mi < allMoveButtons.length; mi++) {
+    for (let mi = 0; mi < moveButtons1.length; mi++) {
+      var mb = moveButtons1[mi];
       (function(moveData) {
-        moveLookRow.push(
+        actionRow1.push(
           React.createElement('button', {
             key: moveData.move,
             className: 'btn',
             onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
-            style: { background: moveData.color, flex: 1, padding: '5px 2px', fontSize: '9px' }
+            style: { background: moveData.color, flex: 1, padding: '8px 4px', fontSize: '12px' }
           }, moveData.label)
         );
-      })(allMoveButtons[mi]);
+      })(mb);
+    }
+
+    var lookButtons = [
+      { label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' },
+      { label: 'Look Right', move: 'lookRight', color: '#8b5cf6' }
+    ];
+    for (var li = 0; li < lookButtons.length; li++) {
+      (function(moveData) {
+        actionRow2.push(
+          React.createElement('button', {
+            key: moveData.move,
+            className: 'btn',
+            onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
+            style: { background: moveData.color, flex: 1, padding: '8px 4px', fontSize: '12px' }
+          }, moveData.label)
+        );
+      })(lookButtons[li]);
     }
   }
 
-  // Escape row: Scramble, Throw Away, Tuck (always available, sole options in survival)
+  // Row 3: Scramble, Throw Away, Tuck (always available, sole options in survival)
   var escapeButtons = [
     { label: '\u{1F3C3} Scramble', move: 'scramble', color: '#16a34a' },
     { label: '\u274C Throw Away', move: 'throwAway', color: '#ca8a04' },
@@ -5836,19 +5835,23 @@ function DecisionScreen({ state, dispatch }) {
   ];
   for (var ei = 0; ei < escapeButtons.length; ei++) {
     (function(moveData) {
-      escapeRow.push(
+      actionRow3.push(
         React.createElement('button', {
           key: moveData.move,
           className: 'btn',
           onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
-          style: { background: moveData.color, flex: 1, padding: '6px 4px', fontSize: '10px' }
+          style: { background: moveData.color, flex: 1, padding: '8px 6px', fontSize: '12px' }
         }, moveData.label)
       );
     })(escapeButtons[ei]);
   }
 
   return React.createElement('div', { className: 'decision-panel', style: { position: 'relative', zIndex: 20 } },
-    // Row 1: Pocket bar (no QB DECISION header)
+    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' } },
+      React.createElement('span', { style: { fontWeight: 'bold', fontSize: '15px' } }, 'QB DECISION'),
+      React.createElement('span', { style: { color: '#aaa', fontSize: '12px' } }, 'Phase ' + state.currentPhase)
+    ),
+    // Pocket bar
     React.createElement('div', { className: 'pocket-bar-container' },
       React.createElement('span', { className: 'pocket-label' }, 'Pocket'),
       React.createElement('div', { className: 'pocket-bar-bg' },
@@ -5871,12 +5874,12 @@ function DecisionScreen({ state, dispatch }) {
     state.lookDir ? React.createElement('div', {
       style: { textAlign: 'center', color: '#84cc16', fontSize: '11px', marginBottom: '4px' }
     }, '\u2192 Scramble lane ' + state.lookDir) : null,
-    // Row 2: Throw targets grid
+    // Throw targets grid
     React.createElement('div', { className: 'targets-grid' }, targetElements),
-    // Row 3: Movement + Look (merged)
-    moveLookRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, moveLookRow) : null,
-    // Row 4: Escape buttons
-    React.createElement('div', { className: 'action-buttons' }, escapeRow)
+    // Action buttons
+    actionRow1.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, actionRow1) : null,
+    actionRow2.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, actionRow2) : null,
+    React.createElement('div', { className: 'action-buttons' }, actionRow3)
   );
 }
 
@@ -6001,7 +6004,7 @@ function RunnerScreen({ state, dispatch }) {
           onClick: sprintFatigued ? null : function() { dispatch({ type: 'RUNNER_MOVE', moveType: moveData.type }); },
           disabled: sprintFatigued,
           style: {
-            background: moveColors[idx % 4], flex: 1, padding: '8px 4px', textAlign: 'center', minWidth: '45%',
+            background: moveColors[idx % 4], flex: 1, padding: '12px 8px', textAlign: 'center', minWidth: '45%',
             opacity: sprintFatigued ? 0.3 : 1,
             cursor: sprintFatigued ? 'not-allowed' : 'pointer',
             position: 'relative'
@@ -6088,7 +6091,7 @@ function ContactScreen({ state, dispatch }) {
           key: 'ct-' + moveData.type,
           className: 'btn',
           onClick: function() { dispatch({ type: 'CONTACT_MOVE', moveType: moveData.type }); },
-          style: { background: moveData.color, flex: 1, padding: '8px 4px', textAlign: 'center', minWidth: '45%' }
+          style: { background: moveData.color, flex: 1, padding: '12px 8px', textAlign: 'center', minWidth: '45%' }
         },
           React.createElement('div', { style: { fontWeight: 'bold', fontSize: '13px' } }, moveData.label),
           React.createElement('div', { style: { fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' } },
@@ -6228,90 +6231,39 @@ function CoachAdvice({ state }) {
 // 13. TOUCHDOWN SCREEN
 // ============================================================
 function TouchdownScreen({ state, dispatch }) {
-  var result = state.lastResult;
-  var description = state.resultText || 'TOUCHDOWN!';
-  var colors = ['gold', '#ef4444', '#3b82f6', '#22c55e', '#f97316'];
+  const result = state.lastResult;
+  const description = state.resultText || 'TOUCHDOWN!';
 
-  // Score countup
-  var countState = React.useState(0);
-  var count = countState[0];
-  var setCount = countState[1];
-  var countRef = React.useRef(0);
-  React.useEffect(function() {
-    var id = setInterval(function() {
-      countRef.current = countRef.current + 1;
-      setCount(countRef.current);
-      if (countRef.current >= 7) clearInterval(id);
-    }, 85);
-    return function() { clearInterval(id); };
-  }, []);
-
-  // Multi-burst fireworks (3 clusters)
-  var fireworks = [];
-  var bursts = [
-    { left: '30%', top: '30%', particles: 8, delay: 0 },
-    { left: '50%', top: '25%', particles: 10, delay: 0.4 },
-    { left: '70%', top: '35%', particles: 8, delay: 0.8 }
-  ];
-  for (var bi = 0; bi < bursts.length; bi++) {
-    var burst = bursts[bi];
-    for (var pi = 0; pi < burst.particles; pi++) {
-      var angle = (pi / burst.particles) * 360 + Math.random() * 30;
-      var dist = 50 + Math.random() * 40;
-      var dx = Math.cos(angle * Math.PI / 180) * dist;
-      var dy = Math.sin(angle * Math.PI / 180) * dist;
-      var size = 6 + Math.floor(Math.random() * 7);
-      fireworks.push(
-        React.createElement('div', {
-          key: 'fw-' + bi + '-' + pi,
-          className: 'firework',
-          style: {
-            '--dx': dx + 'px', '--dy': dy + 'px',
-            background: colors[Math.floor(Math.random() * colors.length)],
-            left: burst.left, top: burst.top,
-            width: size + 'px', height: size + 'px',
-            animationDelay: (burst.delay + pi * 0.06) + 's'
-          }
-        })
-      );
-    }
-  }
-
-  // Confetti rain (35 pieces)
-  var confetti = [];
-  var confettiColors = ['gold', '#ef4444', '#3b82f6', '#22c55e', '#f97316', '#fff'];
-  for (var ci = 0; ci < 35; ci++) {
-    var cw = 4 + Math.floor(Math.random() * 5);
-    var ch = 8 + Math.floor(Math.random() * 9);
-    confetti.push(
+  // Firework elements
+  const fireworks = [];
+  for (let fi = 0; fi < 12; fi++) {
+    const angle = (fi / 12) * 360;
+    const dist = 60 + Math.random() * 40;
+    const dx = Math.cos(angle * Math.PI / 180) * dist;
+    const dy = Math.sin(angle * Math.PI / 180) * dist;
+    const colors = ['gold', '#ef4444', '#3b82f6', '#22c55e', '#f97316'];
+    fireworks.push(
       React.createElement('div', {
-        key: 'conf-' + ci,
-        className: 'confetti-piece',
+        key: 'fw-' + fi,
+        className: 'firework',
         style: {
-          left: (Math.random() * 100) + '%',
-          width: cw + 'px',
-          height: ch + 'px',
-          background: confettiColors[Math.floor(Math.random() * confettiColors.length)],
-          borderRadius: Math.random() < 0.3 ? '50%' : '0px',
-          animationDuration: (1.8 + Math.random() * 1.4) + 's',
-          animationDelay: (Math.random() * 1.5) + 's'
+          '--dx': dx + 'px', '--dy': dy + 'px',
+          background: colors[fi % colors.length],
+          left: '50%', top: '40%',
+          animationDelay: (fi * 0.08) + 's'
         }
       })
     );
   }
 
-  var scoreStyle = { fontSize: '28px', fontWeight: 'bold', color: '#22c55e', margin: '12px 0' };
-  if (count >= 7) {
-    scoreStyle.animation = 'scoreCountPulse 0.3s ease';
-  }
-
-  return React.createElement('div', { className: 'overlay-screen td-flash' },
-    confetti,
+  return React.createElement('div', { className: 'overlay-screen' },
     fireworks,
     React.createElement('div', { className: 'overlay-card' },
       React.createElement('div', { style: { fontSize: '60px', marginBottom: '10px' } }, '\u{1F3C8}'),
       React.createElement('div', { className: 'td-text' }, 'TOUCHDOWN!'),
-      React.createElement('div', { style: scoreStyle }, '+' + count + ' POINTS'),
+      React.createElement('div', {
+        style: { fontSize: '28px', fontWeight: 'bold', color: '#22c55e', margin: '12px 0' }
+      }, '+7 POINTS'),
       React.createElement('p', {
         style: { color: '#aaa', fontSize: '13px', marginBottom: '16px' }
       }, description),
