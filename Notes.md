@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `index.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -12,6 +12,19 @@
 - Camera mode (`strategic` / `follow`) stored as explicit state field
 - CSS class-based transitions only
 - Pure functions for all game logic
+
+---
+
+## Alpha 2.2.4 — Run Game & Camera Hotfix (2026-02-23)
+- BUGFIX: RPO handoff teleported RB to LOS (y:0) instead of backfield position (y:formation.RB.y)
+- BUGFIX: ANIMATION_TICK was advancing defenders every 200ms during turn-based RUNNER phase
+  - Defenders now frozen during RUNNER; movement only on player button press (RUNNER_MOVE)
+- BUGFIX: Stale viewport measurements after phase change
+  - Added state.phase to measurement useEffect dependency array
+  - Double requestAnimationFrame ensures CSS reflow before measuring
+- BUGFIX: Inline styles on overlay buttons prevented CSS media queries from compressing on mobile
+  - Removed hardcoded padding/fontSize from button inline styles
+- Version strings updated to v2.2.4
 
 ---
 

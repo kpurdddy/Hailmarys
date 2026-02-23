@@ -3091,7 +3091,7 @@ function gameReducerCore(state, action) {
           phase: 'RUNNER',
           carrier: 'RB',
           carrierRole: 'RB',
-          carrierXY: { x: formation.RB.x, y: formation.RB.y },
+          carrierXY: { x: formation.RB.x, y: 0 },
           runMoves: 0,
           yacMoves: 0,
           isYAC: false,
@@ -4024,9 +4024,15 @@ function gameReducerCore(state, action) {
         return state;
       }
 
-      // RUNNER: turn-based only, no real-time movement
+      // RUNNER: advance carrier slightly, converge defenders
       if (state.phase === 'RUNNER') {
-        return state;
+        const newDefPos = advanceDefenders(
+          state.currentDefenderPos, state.carrierXY, state.difficulty, state.runMoves
+        );
+        return {
+          ...state,
+          currentDefenderPos: newDefPos,
+        };
       }
 
       // CONTACT: small jitter/struggle animation
@@ -4274,19 +4280,19 @@ function GameField({ state, dispatch }) {
   const tokenScale = yardPx / YARD_PX;
 
   // Measure field width and height
-  React.useEffect(function() {
-    var measure = function() {
+  React.useEffect(() => {
+    const measure = () => {
       if (viewportRef.current) {
-        var rect = viewportRef.current.getBoundingClientRect();
+        const rect = viewportRef.current.getBoundingClientRect();
         setFieldWidth(rect.width);
         setViewportHeight(rect.height);
       }
     };
-    // Double RAF ensures CSS layout recalculations finish before measuring
-    requestAnimationFrame(function() { requestAnimationFrame(measure); });
+    // Measure after layout is complete
+    requestAnimationFrame(measure);
     window.addEventListener('resize', measure);
-    return function() { window.removeEventListener('resize', measure); };
-  }, [state.phase]);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   // Camera positioning
   React.useEffect(() => {
@@ -5222,7 +5228,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.4" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.3" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5456,7 +5462,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARYS"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.4'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.3'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5815,7 +5821,7 @@ function DecisionScreen({ state, dispatch }) {
             key: moveData.move,
             className: 'btn',
             onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
-            style: { background: moveData.color, flex: 1 }
+            style: { background: moveData.color, flex: 1, padding: '5px 2px', fontSize: '9px' }
           }, moveData.label)
         );
       })(allMoveButtons[mi]);
@@ -5835,7 +5841,7 @@ function DecisionScreen({ state, dispatch }) {
           key: moveData.move,
           className: 'btn',
           onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
-          style: { background: moveData.color, flex: 1 }
+          style: { background: moveData.color, flex: 1, padding: '6px 4px', fontSize: '10px' }
         }, moveData.label)
       );
     })(escapeButtons[ei]);
