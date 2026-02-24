@@ -1897,9 +1897,13 @@ function formatDown(down, distance, ballPos) {
   return ord + ' & ' + distLabel;
 }
 
-function advanceDefenders(defenders, carrierPos, difficulty, runMoveCount) {
+function advanceDefenders(defenders, carrierPos, difficulty, runMoveCount, carrierGain) {
   const params = DIFFICULTY_PARAMS[difficulty];
-  const baseSpeed = params.pursuitSpeed;
+  // Scale defender movement by how far the carrier moved this turn
+  // pursuitSpeed is a ratio: 0.82 in Preseason means defenders cover 82% of carrier's distance
+  var distBase = (carrierGain !== undefined && carrierGain > 0) ? carrierGain : 3.5;
+  distBase = Math.max(2.5, distBase); // minimum 2.5 so defenders always close in
+  const baseSpeed = params.pursuitSpeed * distBase;
   let speed = baseSpeed;
   if (runMoveCount > 2) {
     speed = baseSpeed * (1 + 0.15 * (runMoveCount - 2));
@@ -3291,7 +3295,8 @@ function gameReducerCore(state, action) {
       }
 
       // Advance defenders toward carrier
-      const newDefenders = advanceDefenders(defenders, newCarrierXY, state.difficulty, newRunMoves);
+      var carrierGain = newCarrierXY.y - carrierPos.y;
+      const newDefenders = advanceDefenders(defenders, newCarrierXY, state.difficulty, newRunMoves, carrierGain);
 
       // Check for contact trigger (nearest defender within 1.5 yards)
       const nearestDef = findNearestDefender(newCarrierXY, newDefenders);
@@ -3330,30 +3335,6 @@ function gameReducerCore(state, action) {
           yacMoves: newYacMoves,
           sprintCount: newSprintCount,
           fieldAlert: 'CONTACT!',
-        };
-      }
-
-      // Check YAC limit
-      if (state.isYAC && newYacMoves >= state.maxYacMoves) {
-        const totalYards = Math.round(newCarrierXY.y);
-        const playName = play ? play.name : 'play';
-        const defName = state.chosenDefense || 'base43';
-        const commCat = totalYards >= 15 ? 'bigPass' : 'shortPass';
-        const comm = pickCommentary(commCat, { yards: totalYards, play: playName, def: defName, target: state.carrier });
-        return {
-          ...state,
-          phase: 'RESULT',
-          carrierXY: newCarrierXY,
-          currentDefenderPos: newDefenders,
-          lastResult: { type: 'complete', yards: totalYards, turnover: false },
-          resultText: 'Tackled after the catch! Gain of ' + totalYards + ' yards.',
-          resultColor: totalYards >= 10 ? '#22c55e' : '#eab308',
-          showCommentary: true,
-          danComment: comm.dan,
-          kikiComment: comm.kiki,
-          runMoves: newRunMoves,
-          yacMoves: newYacMoves,
-          sprintCount: newSprintCount,
         };
       }
 
@@ -5132,7 +5113,7 @@ function GameField({ state, dispatch }) {
     ),
     (state.phase === 'RUNNER' && state.carrier) ?
       React.createElement('span', { style: { color: '#84cc16', marginLeft: '10px' } },
-        state.carrier + ' | Moves: ' + state.runMoves + (state.isYAC ? ' (YAC ' + state.yacMoves + '/' + state.maxYacMoves + ')' : '')
+        state.carrier + ' | Moves: ' + state.runMoves + (state.isYAC ? ' (YAC ' + state.yacMoves + ')' : '')
       ) : null,
     state.phase === 'DECISION' ?
       React.createElement('span', { style: { color: '#84cc16', marginLeft: '10px' } },
@@ -5232,7 +5213,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.5" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.6" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5466,7 +5447,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARYS"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.5'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.6'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5968,8 +5949,8 @@ function RunnerScreen({ state, dispatch }) {
 
   const isYAC = state.isYAC;
   const moveCounter = isYAC
-    ? 'YAC ' + state.yacMoves + '/' + state.maxYacMoves
-    : 'Run #' + (state.runMoves + 1);
+    ? 'YAC Move #' + (state.yacMoves + 1)
+    : 'Run Move #' + (state.runMoves + 1);
 
   // Nearest defender info
   const nearestDef = findNearestDefender(state.carrierXY, state.currentDefenderPos);

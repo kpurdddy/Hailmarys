@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `index.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5), `index-2.2.5-backup.html` (pre-2.2.6)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -12,6 +12,13 @@
 - Camera mode (`strategic` / `follow`) stored as explicit state field
 - CSS class-based transitions only
 - Pure functions for all game logic
+
+---
+
+## Alpha 2.2.6 — Pursuit Math & Phantom Tackle Fix (2026-02-23)
+- BUGFIX: Defender pursuit speed now scales by carrier movement distance per turn (was flat 0.82-1.0 yards regardless of carrier sprint distance — created treadmill effect where defenders appeared frozen)
+- BUGFIX: Removed maxYacMoves phantom tackle — play no longer force-ends after 3 YAC moves regardless of defender position. Tackles now happen organically when a defender gets within 1.5 yards.
+- UI: YAC move counter no longer shows "/3" limit
 
 ---
 
