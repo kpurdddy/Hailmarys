@@ -29,7 +29,7 @@ body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacS
 .scoreboard .timeout-dot.active{background:#f5a623}
 
 /* Field */
-.field-viewport{width:100%;height:calc(100vh - 180px);min-height:400px;max-height:600px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px}
+.field-viewport{width:100%;height:calc(100vh - 120px);min-height:400px;max-height:700px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px}
 .field-viewport.overlay-active{height:calc(100vh - 60px);max-height:900px}
 .field-container{position:relative;will-change:transform;transition:transform 0.4s ease}
 .field-container.instant-cam{transition:none}
@@ -596,13 +596,13 @@ const DEFENSES = [
 const MATCHUP_MATRIX = {
   // Plays 1-7 are runs (IDs match PLAYS array order)
   //          base43 nickel blitz cover2 goalline
-  1:  {base43: 0, nickel: 1, blitz: 1, cover2: 0, goalline:-2}, // Inside Run
-  2:  {base43: 0, nickel:-1, blitz: 1, cover2:-1, goalline: 1}, // Outside Run
-  3:  {base43: 1, nickel: 0, blitz: 2, cover2: 0, goalline:-2}, // Counter
-  4:  {base43: 0, nickel:-1, blitz: 1, cover2:-1, goalline: 1}, // HB Toss
+  1:  {base43: 0, nickel: 1, blitz:-1, cover2: 0, goalline:-2}, // Inside Run
+  2:  {base43: 0, nickel:-1, blitz:-1, cover2:-1, goalline: 1}, // Outside Run
+  3:  {base43: 1, nickel: 0, blitz: 0, cover2: 0, goalline:-2}, // Counter
+  4:  {base43: 0, nickel:-1, blitz:-1, cover2:-1, goalline: 1}, // HB Toss
   5:  {base43: 1, nickel: 1, blitz: 0, cover2: 1, goalline:-1}, // QB Sneak
   6:  {base43: 0, nickel: 2, blitz:-2, cover2: 1, goalline:-1}, // Power Run
-  7:  {base43:-1, nickel: 1, blitz: 2, cover2: 0, goalline:-1}, // Stretch Run
+  7:  {base43:-1, nickel: 1, blitz: 0, cover2: 0, goalline:-1}, // Stretch Run
   // Plays 8-15 are passes
   8:  {base43: 0, nickel:-1, blitz: 2, cover2: 1, goalline: 2}, // Quick Slants
   9:  {base43: 1, nickel: 0, blitz:-2, cover2: 0, goalline: 2}, // Deep Post
@@ -634,7 +634,7 @@ const DIFFICULTY_PARAMS = {
     groundingRisk: 0.20,      // ~20%
     cpuScoringMult: 0.6,      // base odds x0.6
     audibleLimit: Infinity,   // unlimited
-    fumbleMultiplier: 0.05,   // essentially zero
+    fumbleMultiplier: 0,       // zero fumbles while learning
     trickFumbleMult: 0.30,    // ~2.4% on 8% base
     blitzSackChance: 0.02,    // 2%
     autoSackWarnings: 3,      // auto-sack after 3 tuck warnings
@@ -655,7 +655,7 @@ const DIFFICULTY_PARAMS = {
     groundingRisk: 0.50,      // ~50%
     cpuScoringMult: 0.8,      // base odds x0.8
     audibleLimit: Infinity,   // unlimited
-    fumbleMultiplier: 0.10,   // 10% multiplier
+    fumbleMultiplier: 0,       // zero fumbles while learning
     trickFumbleMult: 0.30,    // ~2.4% on 8% base
     blitzSackChance: 0.05,    // 5%
     autoSackWarnings: 2,      // auto-sack after 2 tuck warnings
@@ -2095,6 +2095,7 @@ const INITIAL_STATE = {
 
   // UI
   isPaused: false,
+  showNoteToPlayers: false,
   muted: false,
   clockMin: 15,
   clockSec: 0,
@@ -3147,23 +3148,21 @@ function gameReducerCore(state, action) {
             fieldAlert: null,
           };
         }
-        // Complete: TE at flat route spot, RUNNER mode
-        const teRoute = buildRoute('flat', formation.TE.x, formation.TE.y);
-        const teSpot = teRoute[1] || teRoute[0]; // Use second waypoint as catch point
+        // Complete: auto-resolve for 3-6 yards (quick, safe play)
+        var quickGain = 3 + Math.floor(Math.random() * 4); // 3-6 yards
+        var comm = pickCommentary('passCompShort', {
+          target: 'TE', play: play.name,
+          def: state.chosenDefense, yards: quickGain
+        });
         return {
           ...state,
-          phase: 'RUNNER',
-          carrier: 'TE',
-          carrierRole: 'TE',
-          carrierXY: {
-            x: formation.TE.x + (teSpot ? teSpot.x : 0),
-            y: formation.TE.y + (teSpot ? teSpot.y : 2)
-          },
-          isYAC: true,
-          yacMoves: 0,
-          maxYacMoves: 3,
-          runMoves: 0,
-          tacklesBroken: 0,
+          phase: 'RESULT',
+          lastResult: { type: 'complete', yards: quickGain, turnover: false },
+          resultText: 'RPO quick pass to TE for ' + quickGain + ' yards!',
+          resultColor: '#22c55e',
+          showCommentary: true,
+          danComment: comm ? comm.dan : null,
+          kikiComment: comm ? comm.kiki : null,
           fieldAlert: null,
         };
       }
@@ -4071,6 +4070,10 @@ function gameReducerCore(state, action) {
       return { ...state, isPaused: !state.isPaused };
     }
 
+    case 'TOGGLE_NOTE_TO_PLAYERS': {
+      return { ...state, showNoteToPlayers: !state.showNoteToPlayers };
+    }
+
     // ----------------------------------------------------------
     // RESTART_GAME
     // ----------------------------------------------------------
@@ -4308,9 +4311,16 @@ function GameField({ state, dispatch }) {
 
     const trackPixel = (110 - trackYard) * yardPx;
     // Offset camera for overlay phases: put LOS in upper third, not center
-    var overlayPhases = ['DECISION', 'RUNNER', 'CONTACT'];
+    var overlayPhases = ['DECISION', 'RUNNER', 'CONTACT', 'RPO_READ', 'FOURTH_DOWN'];
     var isOverlay = overlayPhases.indexOf(state.phase) !== -1;
-    var cameraOffset = isOverlay ? viewportHeight * 0.35 : viewportHeight / 2;
+    var cameraOffset;
+    if (state.phase === 'RUNNER' || state.phase === 'CONTACT') {
+      cameraOffset = viewportHeight * 0.45;
+    } else if (isOverlay) {
+      cameraOffset = viewportHeight * 0.35;
+    } else {
+      cameraOffset = viewportHeight / 2;
+    }
     var targetScroll = trackPixel - cameraOffset;
     var bottomClamp = isOverlay ? (totalFieldHeight - viewportHeight + viewportHeight * 0.6) : (totalFieldHeight - viewportHeight);
     var clampedScroll = Math.max(0, Math.min(bottomClamp, targetScroll));
@@ -5099,7 +5109,7 @@ function GameField({ state, dispatch }) {
   }
 
   // ---- DOWN & DISTANCE HUD ----
-  var isOverlayPhase = ['DECISION', 'RUNNER', 'CONTACT'].indexOf(state.phase) !== -1;
+  var isOverlayPhase = ['DECISION', 'RUNNER', 'CONTACT', 'RPO_READ', 'FOURTH_DOWN'].indexOf(state.phase) !== -1;
   const downDistHud = React.createElement('div', {
     className: 'hud-compact',
     style: {
@@ -5222,7 +5232,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.4" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.5" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5456,7 +5466,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARYS"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.4'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.5'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5861,10 +5871,7 @@ function DecisionScreen({ state, dispatch }) {
     survivalMode ? React.createElement('div', {
       style: { color: '#ef4444', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', margin: '6px 0', animation: 'pulse 0.8s ease-in-out infinite' }
     }, '\u26A0 SURVIVAL MODE \u2014 Pocket collapsing!') : null,
-    // Scramble lane indicator
-    state.lookDir ? React.createElement('div', {
-      style: { textAlign: 'center', color: '#84cc16', fontSize: '11px', marginBottom: '4px' }
-    }, '\u2192 Scramble lane ' + state.lookDir) : null,
+    null,
     // Row 2: Throw targets grid
     React.createElement('div', { className: 'targets-grid' }, targetElements),
     // Row 3: Movement + Look (merged)
@@ -6699,6 +6706,66 @@ function CoinTossScreen({ state, dispatch }) {
 }
 
 // ============================================================
+// 21a. NOTE TO PLAYERS SCREEN
+// ============================================================
+function NoteToPlayersScreen({ dispatch }) {
+  return React.createElement('div', {
+    style: {
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.9)', zIndex: 210,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '20px'
+    }
+  },
+    React.createElement('div', {
+      style: {
+        background: '#1a1a2e', border: '2px solid #f5a623', borderRadius: '12px',
+        padding: '24px', maxWidth: '400px', width: '100%', maxHeight: '80vh',
+        overflowY: 'auto'
+      }
+    },
+      React.createElement('h2', {
+        style: { color: '#f5a623', fontSize: '20px', marginBottom: '16px', textAlign: 'center' }
+      }, 'NOTE TO PLAYERS'),
+
+      React.createElement('p', {
+        style: { color: '#ccc', fontSize: '14px', lineHeight: '1.6', marginBottom: '12px' }
+      }, 'Hail Marys is an early alpha hobby project. You\'re playing a work in progress \u2014 things will break, some features are rough, and a lot is still coming.'),
+
+      React.createElement('p', {
+        style: { color: '#ccc', fontSize: '14px', lineHeight: '1.6', marginBottom: '12px' }
+      }, 'The game is designed to teach football through play. Practice and Preseason are forgiving \u2014 they\'re where you learn. Regular Season and Playoffs are where it gets real.'),
+
+      React.createElement('p', {
+        style: { color: '#ccc', fontSize: '14px', lineHeight: '1.6', marginBottom: '12px' }
+      }, 'Coming soon: two-player mode, more trick plays, player stats, stadium events, and a lot more. Got a trick play idea? We want to hear it.'),
+
+      React.createElement('a', {
+        href: 'https://docs.google.com/forms/d/e/1FAIpQLScpBfQ2cYIZmZngcsAf6fN7LhZ4EnUeMTZ7wswL-0FovC4c0g/viewform?usp=dialog',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        style: {
+          display: 'block', background: '#f5a623', color: '#1a1a2e',
+          textAlign: 'center', padding: '14px', borderRadius: '8px',
+          fontWeight: 'bold', fontSize: '16px', textDecoration: 'none',
+          marginBottom: '16px', marginTop: '16px'
+        }
+      }, '\uD83D\uDCDD GIVE US FEEDBACK'),
+
+      React.createElement('p', {
+        style: { color: '#888', fontSize: '11px', textAlign: 'center', marginBottom: '16px' }
+      }, 'Bug reports, ideas, trick play suggestions \u2014 all welcome.'),
+
+      React.createElement('button', {
+        className: 'btn',
+        onClick: function() { dispatch({ type: 'TOGGLE_NOTE_TO_PLAYERS' }); },
+        style: { width: '100%', padding: '12px', fontSize: '14px', background: '#555' }
+      }, 'BACK')
+    )
+  );
+}
+
+// ============================================================
 // 21b. PAUSE MENU OVERLAY
 // ============================================================
 function PauseMenuOverlay({ state, dispatch }) {
@@ -6730,6 +6797,11 @@ function PauseMenuOverlay({ state, dispatch }) {
         onClick: function() { dispatch({ type: 'RESTART_GAME' }); },
         style: { width: '100%', padding: '14px', fontSize: '16px', marginBottom: '10px', background: '#ca8a04' }
       }, 'RESTART GAME'),
+      React.createElement('button', {
+        className: 'btn',
+        onClick: function() { dispatch({ type: 'TOGGLE_NOTE_TO_PLAYERS' }); },
+        style: { width: '100%', padding: '14px', fontSize: '16px', marginBottom: '10px', background: '#2563eb' }
+      }, '\uD83D\uDCAC NOTE TO PLAYERS'),
       React.createElement('button', {
         className: 'btn',
         onClick: function() { dispatch({ type: 'RESTART_GAME' }); },
@@ -6897,7 +6969,8 @@ function App() {
             color: '#aaa', fontSize: '18px', padding: '4px 10px', cursor: 'pointer', lineHeight: '1'
           }
         }, '\u2630'),
-        React.createElement(PauseMenuOverlay, { state: state, dispatch: dispatch })
+        React.createElement(PauseMenuOverlay, { state: state, dispatch: dispatch }),
+        state.showNoteToPlayers ? React.createElement(NoteToPlayersScreen, { dispatch: dispatch }) : null
       );
     case 'FOURTH_DOWN':
       panelContent = React.createElement(FourthDownScreen, { state: state, dispatch: dispatch });
@@ -6917,7 +6990,7 @@ function App() {
     }
   }, '\u2630');
 
-  var isOverlayPhase = (phase === 'DECISION' || phase === 'RUNNER' || phase === 'CONTACT');
+  var isOverlayPhase = (phase === 'DECISION' || phase === 'RUNNER' || phase === 'CONTACT' || phase === 'RPO_READ' || phase === 'FOURTH_DOWN');
 
   return React.createElement('div', { className: 'game-container' },
     React.createElement(Scoreboard, { state: state, dispatch: dispatch }),
@@ -6938,7 +7011,8 @@ function App() {
     state.coachAdvice && phase !== 'PRESNAP' ? React.createElement(CoachAdvice, { state: state }) : null,
     React.createElement(PracticeOverlay, { state: state, dispatch: dispatch }),
     menuBtn,
-    React.createElement(PauseMenuOverlay, { state: state, dispatch: dispatch })
+    React.createElement(PauseMenuOverlay, { state: state, dispatch: dispatch }),
+    state.showNoteToPlayers ? React.createElement(NoteToPlayersScreen, { dispatch: dispatch }) : null
   );
 }
 
