@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `index.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5), `index-2.2.5-backup.html` (pre-2.2.6), `index-2.2.6-backup.html` (pre-2.2.7)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5), `index-2.2.5-backup.html` (pre-2.2.6), `index-2.2.6-backup.html` (pre-2.2.7), `index-2.2.7-backup.html` (pre-2.2.8)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -12,6 +12,18 @@
 - Camera mode (`strategic` / `follow`) stored as explicit state field
 - CSS class-based transitions only
 - Pure functions for all game logic
+
+---
+
+## Alpha 2.2.8 — UI Declutter & Mechanics Hotfix (2026-02-24)
+- BALANCE: Run game box count thresholds loosened — gap open at <=7 (was <=6), STACKED BOX at >=8 (was >=7)
+- UI: Decision panel stripped down — at snap only shows targets + "Drop Back (Run the Play)"; Scramble/Throw Away/Tuck appear only when pocket < 50%
+- UI: Intended receiver token highlighted on field with gold ring + "INTENDED" badge at snap and during DECISION
+- FIX: PracticeOverlay quarantined to practice difficulty only (reverted preseason overlay from 2.2.7)
+- UI: CPU_DRIVING phase extended to 2.5s with animated ticking dots effect
+- BALANCE: Break tackle nerfed further — Juke 45% (was 54%), Spin 41% (was 48%), Stiff Arm 40% (was 47% for RB). Degradation unchanged.
+- CSS: Field viewport enforces vertical rectangle geometry via max-width:min(100%, 55vh) — eliminates squashed square on wide screens
+- NOTE: Contact threshold (2.0) and WR/TE 4-button grid already applied in 2.2.7, confirmed intact
 
 ---
 

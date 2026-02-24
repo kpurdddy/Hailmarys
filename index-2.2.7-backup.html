@@ -29,7 +29,7 @@ body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacS
 .scoreboard .timeout-dot.active{background:#f5a623}
 
 /* Field */
-.field-viewport{width:100%;max-width:min(100%, 55vh);height:calc(100vh - 120px);min-height:400px;max-height:700px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px;margin-left:auto;margin-right:auto}
+.field-viewport{width:100%;height:calc(100vh - 120px);min-height:400px;max-height:700px;overflow:hidden;position:relative;border:2px solid #333;border-radius:4px;margin-top:52px}
 .field-viewport.overlay-active{height:calc(100vh - 60px);max-height:900px}
 .field-container{position:relative;will-change:transform;transition:transform 0.4s ease}
 .field-container.instant-cam{transition:none}
@@ -262,11 +262,6 @@ svg.route-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-
   0%,100%{opacity:0.6;transform:scale(1)}
   50%{opacity:1;transform:scale(1.05)}
 }
-@keyframes tickPop{
-  0%,100%{opacity:0.2;transform:scale(0.6)}
-  50%{opacity:1;transform:scale(1.2)}
-}
-.tick-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#fbbf24;animation:tickPop 1.5s ease-in-out infinite}
 .overlay-screen.td-flash{animation:tdFlash 0.35s ease-out forwards}
 @keyframes tdBounce{
   0%{transform:scale(0)}
@@ -1621,15 +1616,15 @@ function resolveContact(moveType, carrierKey, tacklesBroken, difficulty) {
   let fumbleBase;
   switch (moveType) {
     case 'Spin':
-      breakBase = attrs.skill / 22 + 0.05;
+      breakBase = attrs.skill / 20 + 0.08;
       fumbleBase = 0.08;
       break;
     case 'Juke':
-      breakBase = attrs.skill / 20 + 0.05;
+      breakBase = attrs.skill / 18 + 0.10;
       fumbleBase = 0.05;
       break;
     case 'StiffArm':
-      breakBase = attrs.str / 20 + 0.05;
+      breakBase = attrs.str / 18 + 0.08;
       fumbleBase = 0.06;
       break;
     default:
@@ -2565,7 +2560,7 @@ function gameReducerCore(state, action) {
           return {
             ...state,
             phase: 'RPO_READ',
-            fieldAlert: boxCount >= 8 ? 'Heavy box! Consider pulling the ball.' :
+            fieldAlert: boxCount >= 7 ? 'Heavy box! Consider pulling the ball.' :
                         boxCount <= 4 ? 'Light box. Run should have room.' :
                         'Standard look. Trust your read.',
           };
@@ -4617,8 +4612,6 @@ function GameField({ state, dispatch }) {
 
     // Receiver tokens (W1, W2, TE, RB)
     const receiverKeys = ['W1', 'W2', 'TE', 'RB'];
-    var intendedKey = play && play.primary ? play.primary : null;
-    var showIntended = intendedKey && (state.phase === 'DECISION' || state.phase === 'SNAPPING');
     for (const rk of receiverKeys) {
       let recPosition;
       if (state.currentReceiverPos[rk]) {
@@ -4632,7 +4625,6 @@ function GameField({ state, dispatch }) {
       const isCarrier = state.carrier === rk && (state.phase === 'RUNNER' || state.phase === 'CONTACT');
       const displayPos = isCarrier ? state.carrierXY : recPosition;
       const px = posToPixel(displayPos.x, displayPos.y);
-      var isIntended = showIntended && rk === intendedKey;
 
       playerTokens.push(
         React.createElement(PlayerToken, {
@@ -4648,46 +4640,6 @@ function GameField({ state, dispatch }) {
           scale: tokenScale,
         })
       );
-
-      // Gold ring + INTENDED badge on primary receiver at snap
-      if (isIntended) {
-        playerTokens.push(
-          React.createElement('div', {
-            key: rk + '-intended-ring',
-            style: {
-              position: 'absolute',
-              left: px.left + 'px',
-              top: px.top + 'px',
-              transform: 'translate(-50%, -50%)',
-              width: (30 * (tokenScale || 1)) + 'px',
-              height: (30 * (tokenScale || 1)) + 'px',
-              borderRadius: '50%',
-              border: '2px solid gold',
-              boxShadow: '0 0 8px gold',
-              pointerEvents: 'none',
-              zIndex: 5,
-            }
-          }),
-          React.createElement('div', {
-            key: rk + '-intended-badge',
-            style: {
-              position: 'absolute',
-              left: px.left + 'px',
-              top: (px.top - 18 * (tokenScale || 1)) + 'px',
-              transform: 'translateX(-50%)',
-              background: 'gold',
-              color: '#000',
-              fontSize: '8px',
-              fontWeight: 'bold',
-              padding: '1px 4px',
-              borderRadius: '3px',
-              pointerEvents: 'none',
-              zIndex: 6,
-              whiteSpace: 'nowrap',
-            }
-          }, 'INTENDED')
-        );
-      }
     }
 
     // Defense tokens
@@ -5299,7 +5251,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.8" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.7" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5533,7 +5485,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARYS"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.8'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.7'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5872,65 +5824,28 @@ function DecisionScreen({ state, dispatch }) {
     );
   }
 
-  // Action buttons — contextual based on pocket integrity
+  // Action buttons — movement + look merged into one row
   var moveLookRow = [];
   var escapeRow = [];
-  var showEscape = pocketNum < 50;
-  var isRunPlay = play && play.type === 'run';
 
   if (!survivalMode) {
-    // At snap (high pocket), show only "Drop Back (Run the Play)" as single movement button
-    if (pocketNum >= 50) {
-      moveLookRow.push(
-        React.createElement('button', {
-          key: 'dropBack',
-          className: 'btn',
-          onClick: function() { dispatch({ type: 'QB_ACTION', move: 'dropBack' }); },
-          style: { background: '#3b82f6', flex: 1 }
-        }, 'Drop Back (Run the Play)')
-      );
-    } else {
-      // Pocket degrading — show full movement options
-      var allMoveButtons = [
-        { label: 'Drop Back', move: 'dropBack', color: '#3b82f6' },
-        { label: 'Roll Left', move: 'rollLeft', color: '#6366f1' },
-        { label: 'Roll Right', move: 'rollRight', color: '#6366f1' },
-        { label: 'Step Up', move: 'stepUp', color: '#3b82f6' }
-      ];
-      // Only show Look buttons on deep pass plays (never on run plays)
-      if (!isRunPlay) {
-        var deepPlays = ['deepPost', 'fourVerticals', 'teSeam', 'playAction', 'flea'];
-        var showLooks = deepPlays.includes(play && play.id);
-        if (showLooks) {
-          allMoveButtons.push({ label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' });
-          allMoveButtons.push({ label: 'Look Right', move: 'lookRight', color: '#8b5cf6' });
-        }
-      }
-      for (var mi = 0; mi < allMoveButtons.length; mi++) {
-        (function(moveData) {
-          moveLookRow.push(
-            React.createElement('button', {
-              key: moveData.move,
-              className: 'btn',
-              onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
-              style: { background: moveData.color, flex: 1 }
-            }, moveData.label)
-          );
-        })(allMoveButtons[mi]);
-      }
-    }
-  }
+    // Only show Look buttons on plays where safety manipulation matters
+    var deepPlays = ['deepPost', 'fourVerticals', 'teSeam', 'playAction', 'flea'];
+    var showLooks = deepPlays.includes(play && play.id);
 
-  // Escape row: Scramble, Throw Away, Tuck — only when pocket < 50% (or survival mode)
-  if (showEscape || survivalMode) {
-    var escapeButtons = [
-      { label: '\u{1F3C3} Scramble', move: 'scramble', color: '#16a34a' },
-      { label: '\u274C Throw Away', move: 'throwAway', color: '#ca8a04' },
-      { label: '\u{1F91C} Tuck the Ball', move: 'tuck', color: '#dc2626' }
+    var allMoveButtons = [
+      { label: 'Drop Back', move: 'dropBack', color: '#3b82f6' },
+      { label: 'Roll Left', move: 'rollLeft', color: '#6366f1' },
+      { label: 'Roll Right', move: 'rollRight', color: '#6366f1' },
+      { label: 'Step Up', move: 'stepUp', color: '#3b82f6' }
     ];
-    for (var ei = 0; ei < escapeButtons.length; ei++) {
+    if (showLooks) {
+      allMoveButtons.push({ label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' });
+      allMoveButtons.push({ label: 'Look Right', move: 'lookRight', color: '#8b5cf6' });
+    }
+    for (var mi = 0; mi < allMoveButtons.length; mi++) {
       (function(moveData) {
-        escapeRow.push(
+        moveLookRow.push(
           React.createElement('button', {
             key: moveData.move,
             className: 'btn',
@@ -5938,8 +5853,27 @@ function DecisionScreen({ state, dispatch }) {
             style: { background: moveData.color, flex: 1 }
           }, moveData.label)
         );
-      })(escapeButtons[ei]);
+      })(allMoveButtons[mi]);
     }
+  }
+
+  // Escape row: Scramble, Throw Away, Tuck (always available, sole options in survival)
+  var escapeButtons = [
+    { label: '\u{1F3C3} Scramble', move: 'scramble', color: '#16a34a' },
+    { label: '\u274C Throw Away', move: 'throwAway', color: '#ca8a04' },
+    { label: '\u{1F91C} Tuck the Ball', move: 'tuck', color: '#dc2626' }
+  ];
+  for (var ei = 0; ei < escapeButtons.length; ei++) {
+    (function(moveData) {
+      escapeRow.push(
+        React.createElement('button', {
+          key: moveData.move,
+          className: 'btn',
+          onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
+          style: { background: moveData.color, flex: 1 }
+        }, moveData.label)
+      );
+    })(escapeButtons[ei]);
   }
 
   return React.createElement('div', { className: 'decision-panel', style: { position: 'relative', zIndex: 20 } },
@@ -5967,8 +5901,8 @@ function DecisionScreen({ state, dispatch }) {
     React.createElement('div', { className: 'targets-grid' }, targetElements),
     // Row 3: Movement + Look (merged)
     moveLookRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, moveLookRow) : null,
-    // Row 4: Escape buttons (only when pocket < 50%)
-    escapeRow.length > 0 ? React.createElement('div', { className: 'action-buttons' }, escapeRow) : null
+    // Row 4: Escape buttons
+    React.createElement('div', { className: 'action-buttons' }, escapeRow)
   );
 }
 
@@ -5984,7 +5918,7 @@ function RPOScreen({ state, dispatch }) {
   const boxCount = defObj ? defObj.players.filter(function(p) {
     return p.y <= 8 && p.x >= 25 && p.x <= 75;
   }).length : 5;
-  const gapOpen = boxCount <= 7;
+  const gapOpen = boxCount <= 6;
 
   // Calculate success chances based on gap status
   const handoffBase = gapOpen ? 70 : 35;
@@ -5995,7 +5929,7 @@ function RPOScreen({ state, dispatch }) {
   let scenario;
   if (gapOpen) {
     scenario = { text: "GAP IS OPEN! Hand off or keep it and run through the middle!", bg: 'rgba(34,197,94,0.15)', border: '#22c55e' };
-  } else if (boxCount >= 8) {
+  } else if (boxCount >= 7) {
     scenario = { text: "STACKED BOX -- Too many defenders up front. Throw the quick pass!", bg: 'rgba(239,68,68,0.15)', border: '#ef4444' };
   } else {
     scenario = { text: "MIDDLE IS CLOGGED -- Keep it yourself or throw a quick pass.", bg: 'rgba(234,179,8,0.15)', border: '#eab308' };
@@ -6691,7 +6625,7 @@ function GameOverScreen({ state, dispatch }) {
 // 20. PRACTICE OVERLAY
 // ============================================================
 function PracticeOverlay({ state, dispatch }) {
-  if (state.difficulty !== 'practice') return null;
+  if (state.difficulty !== 'practice' && state.difficulty !== 'preseason') return null;
 
   // Determine which overlay to show based on phase
   let overlayId = null;
@@ -6896,12 +6830,12 @@ function App() {
     }
   }, [state.phase, state.isPaused]);
 
-  // CPU_DRIVING phase timer: resolve CPU drive after 2500ms
+  // CPU_DRIVING phase timer: resolve CPU drive after 1500ms
   React.useEffect(function() {
     if (state.phase === 'CPU_DRIVING' && !state.isPaused) {
       var timer = setTimeout(function() {
         dispatch({ type: 'RESOLVE_CPU_DRIVE' });
-      }, 2500);
+      }, 1500);
       return function() { clearTimeout(timer); };
     }
   }, [state.phase, state.isPaused]);
@@ -6987,7 +6921,7 @@ function App() {
       React.createElement(Scoreboard, { state: state, dispatch: dispatch }),
       React.createElement('div', {
         style: {
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           height: 'calc(100vh - 60px)', textAlign: 'center'
         }
       },
@@ -6996,16 +6930,7 @@ function App() {
             color: '#fbbf24', fontSize: '22px', fontWeight: 'bold',
             animation: 'pulseGlow 1.2s ease-in-out infinite'
           }
-        }, 'Opponent driving...'),
-        React.createElement('div', {
-          style: { marginTop: '16px', display: 'flex', gap: '8px' }
-        },
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0.3s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0.6s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0.9s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '1.2s' } })
-        )
+        }, 'Opponent driving...')
       )
     );
   }
