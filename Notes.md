@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `index.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5), `index-2.2.5-backup.html` (pre-2.2.6)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5), `index-2.2.5-backup.html` (pre-2.2.6), `index-2.2.6-backup.html` (pre-2.2.7)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -12,6 +12,21 @@
 - Camera mode (`strategic` / `follow`) stored as explicit state field
 - CSS class-based transitions only
 - Pure functions for all game logic
+
+---
+
+## Alpha 2.2.7 — Break Tackle Rebalance, Route Breaks & QoL (2026-02-23)
+- BALANCE: Break tackle math rebalanced — Juke 54% (was 82%), Spin 48%, Stiff Arm uses STR/18. Multiplicative degradation: 1st hit full, 2nd hit 40%, 3rd hit 5%.
+- BALANCE: DB route break penalty — DBs track at 50% speed for one phase when their assigned receiver makes a sharp lateral cut (simulates hip flip)
+- BALANCE: Contact threshold increased from 1.5 to 2.0 yards — tackles now fire when tokens visually meet, not after overlap
+- FIX: resolveContact now returns breakChance/fumbleChance in all return paths — Contact screen shows real percentages instead of "Break 0%"
+- UI: Removed "Run Upfield" from WR/TE runner moves — now 4 buttons (Sprint, Cut Outside, Juke, Dive Forward) in clean 2x2 grid
+- UI: Defensive Posture now has 1.5s "Opponent driving..." pause before CPU result appears (CPU_DRIVING phase)
+- UI: Look Left/Right buttons only appear on deep route plays (Deep Post, Four Verticals, TE Seam, Play Action, Flea Flicker)
+- CAMERA: Ball flight now tracks midpoint between QB and receiver instead of snapping to target
+- CAMERA: Bottom clamp adds 15% viewport padding for non-overlay phases — backfield visible on mobile
+- FIX: Preseason difficulty now shows teaching overlays (was gated to Practice only)
+- UI: Touchdown fireworks upgraded to 5 bursts × 18 particles with larger sizes. Confetti removed.
 
 ---
 

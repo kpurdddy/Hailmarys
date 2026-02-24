@@ -249,6 +249,10 @@ svg.route-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-
   0%{transform:translate(0,0) scale(1);opacity:1}
   100%{transform:translate(var(--dx),var(--dy)) scale(0);opacity:0}
 }
+@keyframes confettiFall{
+  0%{transform:translateY(-10px) rotateZ(0deg);opacity:1}
+  100%{transform:translateY(100vh) rotateZ(720deg);opacity:0}
+}
 @keyframes tdFlash{
   0%{background:rgba(255,215,0,0.4)}
   100%{background:rgba(0,0,0,0.85)}
@@ -258,10 +262,7 @@ svg.route-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-
   50%{transform:scale(1.15)}
   100%{transform:scale(1)}
 }
-@keyframes pulseGlow{
-  0%,100%{opacity:0.6;transform:scale(1)}
-  50%{opacity:1;transform:scale(1.05)}
-}
+.confetti-piece{position:absolute;top:-16px;opacity:0.9;animation:confettiFall linear forwards}
 .overlay-screen.td-flash{animation:tdFlash 0.35s ease-out forwards}
 @keyframes tdBounce{
   0%{transform:scale(0)}
@@ -1608,7 +1609,7 @@ function resolveContact(moveType, carrierKey, tacklesBroken, difficulty) {
 
   // Dive forward always ends the play safely (tackle, not break)
   if (moveType === 'DiveForward') {
-    return { result: 'tackle', yards: 1 + Math.floor(Math.random() * 3), fumble: false, breakChance: 0, fumbleChance: 0 };
+    return { result: 'tackle', yards: 1 + Math.floor(Math.random() * 3), fumble: false };
   }
 
   // Calculate break chance base
@@ -1616,19 +1617,19 @@ function resolveContact(moveType, carrierKey, tacklesBroken, difficulty) {
   let fumbleBase;
   switch (moveType) {
     case 'Spin':
-      breakBase = attrs.skill / 20 + 0.08;
+      breakBase = attrs.skill / 13 + 0.10;
       fumbleBase = 0.08;
       break;
     case 'Juke':
-      breakBase = attrs.skill / 18 + 0.10;
+      breakBase = attrs.skill / 12 + 0.15;
       fumbleBase = 0.05;
       break;
     case 'StiffArm':
-      breakBase = attrs.str / 18 + 0.08;
+      breakBase = attrs.str / 12 + 0.10;
       fumbleBase = 0.06;
       break;
     default:
-      breakBase = 0.20;
+      breakBase = 0.30;
       fumbleBase = 0.05;
       break;
   }
@@ -1639,10 +1640,8 @@ function resolveContact(moveType, carrierKey, tacklesBroken, difficulty) {
     fumbleBase = fumbleBase + 0.03;
   }
 
-  // Degrade by tackles already broken (multiplicative)
-  const degradeMultipliers = [1.0, 0.4, 0.05];
-  const degradeIdx = Math.min(tacklesBroken, 2);
-  const breakChance = Math.max(0.02, breakBase * degradeMultipliers[degradeIdx]);
+  // Degrade by tackles already broken
+  const breakChance = Math.max(0.05, breakBase - (tacklesBroken * 0.15));
 
   // Fumble chance
   const escalationIdx = Math.min(tacklesBroken, 3);
@@ -1651,16 +1650,16 @@ function resolveContact(moveType, carrierKey, tacklesBroken, difficulty) {
   // Roll
   const roll = Math.random();
   if (roll < fumbleChance) {
-    return { result: 'fumble', yards: 0, fumble: true, breakChance: breakChance, fumbleChance: fumbleChance };
+    return { result: 'fumble', yards: 0, fumble: true };
   }
   if (roll < fumbleChance + (1 - breakChance)) {
     // Tackled
     const tackleYards = Math.floor(Math.random() * 2); // 0 or 1
-    return { result: 'tackle', yards: tackleYards, fumble: false, breakChance: breakChance, fumbleChance: fumbleChance };
+    return { result: 'tackle', yards: tackleYards, fumble: false };
   }
   // Break free
   const breakYards = 2 + Math.floor(Math.random() * 4); // 2-5
-  return { result: 'break', yards: breakYards, fumble: false, breakChance: breakChance, fumbleChance: fumbleChance };
+  return { result: 'break', yards: breakYards, fumble: false };
 }
 
 function resolveFieldGoal(ballPosition) {
@@ -1877,6 +1876,7 @@ function getRunnerMoveLabels(carrierRole) {
   // WR or TE
   return [
     { label: 'Sprint', type: 'Sprint', description: 'Burst forward with speed' },
+    { label: 'Run Upfield', type: 'HitTheHole', description: 'Push forward through traffic' },
     { label: 'Cut Outside', type: 'CutOutside', description: 'Break to the sideline' },
     { label: 'Juke', type: 'Juke', description: 'Quick cut to evade' },
     { label: 'Dive Forward', type: 'DiveForward', description: 'Fall forward for safe yards' }
@@ -2055,7 +2055,6 @@ const INITIAL_STATE = {
   receiverWaypoints: {},
   currentReceiverPos: {},
   currentDefenderPos: [],
-  prevReceiverPos: {},
   lookDir: null,
   tuckWarnings: 0,
 
@@ -2760,16 +2759,6 @@ function gameReducerCore(state, action) {
         }
       }
 
-      // Save previous receiver positions for route break detection
-      var savedPrevRecPos = {};
-      var prevRec = state.prevReceiverPos || {};
-      var recKeys = ['W1', 'W2', 'TE', 'RB'];
-      for (var ri = 0; ri < recKeys.length; ri++) {
-        if (newRecPos[recKeys[ri]]) {
-          savedPrevRecPos[recKeys[ri]] = { x: newRecPos[recKeys[ri]].x, y: newRecPos[recKeys[ri]].y };
-        }
-      }
-
       // Update DB positions: assignment-based coverage
       const dbTracking = params.dbTracking;
       const dbXScale = 0.53;
@@ -2782,22 +2771,9 @@ function gameReducerCore(state, action) {
             var dx = (target.x - d.x) * dbXScale;
             var dy = target.y - d.y;
             var dist = Math.sqrt(dx * dx + dy * dy);
-
-            // Route break penalty: detect sharp receiver cuts
-            var trackSpeed = dbTracking;
-            var prevPos = prevRec[d.assignedReceiver];
-            if (prevPos && target) {
-              var recDx = target.x - prevPos.x;
-              var recDy = target.y - prevPos.y;
-              var recMoveDist = Math.sqrt(recDx * recDx + recDy * recDy);
-              if (recMoveDist >= 2 && Math.abs(recDx) > 0.6 * Math.abs(recDy)) {
-                trackSpeed = dbTracking * 0.5;
-              }
-            }
-
             if (dist > 0.5) {
-              d.x += (dx / dist) * trackSpeed * 5 / dbXScale;
-              d.y += (dy / dist) * trackSpeed * 5;
+              d.x += (dx / dist) * dbTracking * 5 / dbXScale;
+              d.y += (dy / dist) * dbTracking * 5;
             }
           } else {
             // Zone: drift laterally toward QB's x, hold depth
@@ -2938,7 +2914,6 @@ function gameReducerCore(state, action) {
         currentPhase: newPhase,
         currentReceiverPos: newRecPos,
         currentDefenderPos: newDefPos,
-        prevReceiverPos: savedPrevRecPos,
         holdTimeData: updatedHoldData,
         tuckWarnings: newTuckWarnings,
         fieldAlert: pocketWarn.text || null,
@@ -3325,7 +3300,7 @@ function gameReducerCore(state, action) {
 
       // Check for contact trigger (nearest defender within 1.5 yards)
       const nearestDef = findNearestDefender(newCarrierXY, newDefenders);
-      if (nearestDef && nearestDef.distance < 2.0) {
+      if (nearestDef && nearestDef.distance < 1.5) {
         // Dive forward = safe stop, no contact
         if (genericType === 'DiveForward') {
           const totalYards = Math.round(newCarrierXY.y);
@@ -3921,18 +3896,7 @@ function gameReducerCore(state, action) {
     // POSTURE_PICK
     // ----------------------------------------------------------
     case 'POSTURE_PICK': {
-      return {
-        ...state,
-        phase: 'CPU_DRIVING',
-        postureChoice: action.posture,
-      };
-    }
-
-    // ----------------------------------------------------------
-    // RESOLVE_CPU_DRIVE
-    // ----------------------------------------------------------
-    case 'RESOLVE_CPU_DRIVE': {
-      const posture = state.postureChoice;
+      const posture = action.posture;
       const driveResult = resolveCPUDrive(state.cpuBallPos, posture, state.difficulty);
 
       // Update CPU score
@@ -4323,9 +4287,7 @@ function GameField({ state, dispatch }) {
     if (state.carrier && state.carrierXY && (state.phase === 'RUNNER' || state.phase === 'CONTACT')) {
       trackYard = state.ballPos + state.carrierXY.y;
     } else if (state.ballInFlight && state.ballFlightTarget) {
-      var qbY = state.quarterbackXY ? state.quarterbackXY.y : 0;
-      var targetY = state.ballFlightTarget.y;
-      trackYard = state.ballPos + (qbY + targetY) / 2;
+      trackYard = state.ballPos + state.ballFlightTarget.y;
     }
 
     const trackPixel = (110 - trackYard) * yardPx;
@@ -4341,7 +4303,7 @@ function GameField({ state, dispatch }) {
       cameraOffset = viewportHeight / 2;
     }
     var targetScroll = trackPixel - cameraOffset;
-    var bottomClamp = isOverlay ? (totalFieldHeight - viewportHeight + viewportHeight * 0.6) : (totalFieldHeight - viewportHeight + viewportHeight * 0.15);
+    var bottomClamp = isOverlay ? (totalFieldHeight - viewportHeight + viewportHeight * 0.6) : (totalFieldHeight - viewportHeight);
     var clampedScroll = Math.max(0, Math.min(bottomClamp, targetScroll));
 
     fieldScrollRef.current.style.transform = 'translateY(' + (-clampedScroll) + 'px)';
@@ -5251,7 +5213,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.7" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARYS v2.2.6" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5485,7 +5447,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARYS"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.7'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA v2.2.6'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5829,20 +5791,14 @@ function DecisionScreen({ state, dispatch }) {
   var escapeRow = [];
 
   if (!survivalMode) {
-    // Only show Look buttons on plays where safety manipulation matters
-    var deepPlays = ['deepPost', 'fourVerticals', 'teSeam', 'playAction', 'flea'];
-    var showLooks = deepPlays.includes(play && play.id);
-
     var allMoveButtons = [
       { label: 'Drop Back', move: 'dropBack', color: '#3b82f6' },
       { label: 'Roll Left', move: 'rollLeft', color: '#6366f1' },
       { label: 'Roll Right', move: 'rollRight', color: '#6366f1' },
-      { label: 'Step Up', move: 'stepUp', color: '#3b82f6' }
+      { label: 'Step Up', move: 'stepUp', color: '#3b82f6' },
+      { label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' },
+      { label: 'Look Right', move: 'lookRight', color: '#8b5cf6' }
     ];
-    if (showLooks) {
-      allMoveButtons.push({ label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' });
-      allMoveButtons.push({ label: 'Look Right', move: 'lookRight', color: '#8b5cf6' });
-    }
     for (var mi = 0; mi < allMoveButtons.length; mi++) {
       (function(moveData) {
         moveLookRow.push(
@@ -6275,11 +6231,9 @@ function TouchdownScreen({ state, dispatch }) {
   // Multi-burst fireworks (3 clusters)
   var fireworks = [];
   var bursts = [
-    { left: '20%', top: '25%', particles: 18, delay: 0 },
-    { left: '40%', top: '20%', particles: 18, delay: 0.3 },
-    { left: '60%', top: '30%', particles: 18, delay: 0.6 },
-    { left: '80%', top: '25%', particles: 18, delay: 0.9 },
-    { left: '50%', top: '15%', particles: 18, delay: 1.2 }
+    { left: '30%', top: '30%', particles: 8, delay: 0 },
+    { left: '50%', top: '25%', particles: 10, delay: 0.4 },
+    { left: '70%', top: '35%', particles: 8, delay: 0.8 }
   ];
   for (var bi = 0; bi < bursts.length; bi++) {
     var burst = bursts[bi];
@@ -6288,7 +6242,7 @@ function TouchdownScreen({ state, dispatch }) {
       var dist = 50 + Math.random() * 40;
       var dx = Math.cos(angle * Math.PI / 180) * dist;
       var dy = Math.sin(angle * Math.PI / 180) * dist;
-      var size = 8 + Math.floor(Math.random() * 10);
+      var size = 6 + Math.floor(Math.random() * 7);
       fireworks.push(
         React.createElement('div', {
           key: 'fw-' + bi + '-' + pi,
@@ -6305,12 +6259,36 @@ function TouchdownScreen({ state, dispatch }) {
     }
   }
 
+  // Confetti rain (35 pieces)
+  var confetti = [];
+  var confettiColors = ['gold', '#ef4444', '#3b82f6', '#22c55e', '#f97316', '#fff'];
+  for (var ci = 0; ci < 35; ci++) {
+    var cw = 4 + Math.floor(Math.random() * 5);
+    var ch = 8 + Math.floor(Math.random() * 9);
+    confetti.push(
+      React.createElement('div', {
+        key: 'conf-' + ci,
+        className: 'confetti-piece',
+        style: {
+          left: (Math.random() * 100) + '%',
+          width: cw + 'px',
+          height: ch + 'px',
+          background: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+          borderRadius: Math.random() < 0.3 ? '50%' : '0px',
+          animationDuration: (1.8 + Math.random() * 1.4) + 's',
+          animationDelay: (Math.random() * 1.5) + 's'
+        }
+      })
+    );
+  }
+
   var scoreStyle = { fontSize: '28px', fontWeight: 'bold', color: '#22c55e', margin: '12px 0' };
   if (count >= 7) {
     scoreStyle.animation = 'scoreCountPulse 0.3s ease';
   }
 
   return React.createElement('div', { className: 'overlay-screen td-flash' },
+    confetti,
     fireworks,
     React.createElement('div', { className: 'overlay-card' },
       React.createElement('div', { style: { fontSize: '60px', marginBottom: '10px' } }, '\u{1F3C8}'),
@@ -6625,7 +6603,7 @@ function GameOverScreen({ state, dispatch }) {
 // 20. PRACTICE OVERLAY
 // ============================================================
 function PracticeOverlay({ state, dispatch }) {
-  if (state.difficulty !== 'practice' && state.difficulty !== 'preseason') return null;
+  if (state.difficulty !== 'practice') return null;
 
   // Determine which overlay to show based on phase
   let overlayId = null;
@@ -6830,16 +6808,6 @@ function App() {
     }
   }, [state.phase, state.isPaused]);
 
-  // CPU_DRIVING phase timer: resolve CPU drive after 1500ms
-  React.useEffect(function() {
-    if (state.phase === 'CPU_DRIVING' && !state.isPaused) {
-      var timer = setTimeout(function() {
-        dispatch({ type: 'RESOLVE_CPU_DRIVE' });
-      }, 1500);
-      return function() { clearTimeout(timer); };
-    }
-  }, [state.phase, state.isPaused]);
-
   // Commentary delay: auto-dismiss commentary 2750ms after entering RESULT
   React.useEffect(function() {
     if (state.phase === 'RESULT' && state.danComment && state.showCommentary) {
@@ -6913,25 +6881,6 @@ function App() {
         React.createElement(DefensivePostureScreen, { state: state, dispatch: dispatch })
       ),
       React.createElement(PracticeOverlay, { state: state, dispatch: dispatch })
-    );
-  }
-
-  if (phase === 'CPU_DRIVING') {
-    return React.createElement('div', { className: 'game-container' },
-      React.createElement(Scoreboard, { state: state, dispatch: dispatch }),
-      React.createElement('div', {
-        style: {
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          height: 'calc(100vh - 60px)', textAlign: 'center'
-        }
-      },
-        React.createElement('div', {
-          style: {
-            color: '#fbbf24', fontSize: '22px', fontWeight: 'bold',
-            animation: 'pulseGlow 1.2s ease-in-out infinite'
-          }
-        }, 'Opponent driving...')
-      )
     );
   }
 
