@@ -2,7 +2,7 @@
 
 ## File
 - **Game:** `index.html` (single file)
-- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5), `index-2.2.5-backup.html` (pre-2.2.6), `index-2.2.6-backup.html` (pre-2.2.7), `index-2.2.7-backup.html` (pre-2.2.8)
+- **Backup:** `tacfoot-rewrite-backup-1.0.0.html` (pre-1.5.0), `tacfoot-rewrite-backup-1.5.0.html` (pre-1.5.1), `tacfoot-rewrite-backup-1.5.1.html` (pre-1.5.2), `tacfoot-rewrite-backup-1.5.2.html` (pre-2.0.0), `tacfoot-rewrite-backup-2.0.0.html` (pre-2.1.0), `tacfoot-rewrite-backup-2.1.0.html` (pre-2.1.1), `index-2.2.1-backup.html` (pre-2.2.2), `index-2.2.2-backup.html` (pre-2.2.3), `index-2.2.3-backup.html` (pre-2.2.4), `index-2.2.4-backup.html` (pre-2.2.5), `index-2.2.5-backup.html` (pre-2.2.6), `index-2.2.6-backup.html` (pre-2.2.7), `index-2.2.7-backup.html` (pre-2.2.8), `index-G2.2.8-backup.html` (pre-G2.2.8)
 - **Spec:** `TACFOOT-REWRITE-HANDOFF-v3.md`
 - **Versioning:** Major.Minor.Patch (e.g. 1.5.0 = this build, 1.5.1 = bugfix, 2.0.0 = next feature build)
 
@@ -12,6 +12,14 @@
 - Camera mode (`strategic` / `follow`) stored as explicit state field
 - CSS class-based transitions only
 - Pure functions for all game logic
+
+---
+
+## Alpha G2.2.8 — Master Hotfix (2026-02-24)
+- VERSION: Renamed to G2.2.8 format
+- CAMERA: Forced strategic zoom lock — removed FOLLOW_PHASES, camera never switches to follow mode
+- BALANCE: Unlimited sprint — removed fatigue lock (sprintFatigued always false)
+- (Carried from 2.2.8: box count <=7/>=8, contextual escape buttons, intended target highlight, overlay quarantine, CPU_DRIVING 2.5s, break tackle ~45%, contact threshold 2.0)
 
 ---
 
