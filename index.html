@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Hail Marys</title>
+<title>Hail Marys G2.3.0</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -156,7 +156,7 @@ body{background:#0a0a0a;color:#fff;font-family:system-ui,-apple-system,BlinkMacS
 .firework{position:absolute;width:6px;height:6px;border-radius:50%;animation:fw 1s ease-out forwards}
 
 /* Commentary */
-.commentary-panel{background:rgba(10,10,30,0.95);border-top:3px solid #f5a623;border-radius:8px;padding:12px;margin:8px 0}
+.commentary-panel{position:absolute;top:8px;left:8px;right:8px;z-index:25;background:rgba(10,10,30,0.95);border-top:3px solid #f5a623;border-radius:8px;padding:12px}
 .commentary-panel .dan-line{font-style:normal;color:#e0e0e0;margin-bottom:6px}
 .commentary-panel .kiki-line{color:#a0c4ff;font-size:13px}
 
@@ -258,6 +258,7 @@ svg.route-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-
   50%{transform:scale(1.15)}
   100%{transform:scale(1)}
 }
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulseGlow{
   0%,100%{opacity:0.6;transform:scale(1)}
   50%{opacity:1;transform:scale(1.05)}
@@ -648,7 +649,7 @@ const DIFFICULTY_PARAMS = {
     showTeaching: true
   },
   preseason: {
-    dbTracking: 0.82,        // 82% of WR speed
+    dbTracking: 0.72,        // 72% of WR speed — receivers separate faster
     holdTimeMin: 2,           // 2-5 phases
     holdTimeMax: 5,
     pursuitSpeed: 0.82,       // 82%
@@ -1537,7 +1538,7 @@ function getScrambleLane(leftPct, rightPct) {
   return null;
 }
 
-function calculateReceiverOpenness(receiverPos, allDefenders) {
+function calculateReceiverOpenness(receiverPos, allDefenders, difficulty) {
   const xScale = 0.53; // 53.3 yards / 100 percent
   let minDist = Infinity;
 
@@ -1549,12 +1550,17 @@ function calculateReceiverOpenness(receiverPos, allDefenders) {
     if (dist < minDist) minDist = dist;
   }
 
+  var isEasy = difficulty === 'practice' || difficulty === 'preseason';
+  var wideOpenDist = isEasy ? 4 : 5;
+  var openDist = isEasy ? 2.5 : 3;
+  var contestedDist = isEasy ? 1.0 : 1.5;
+
   let level, label, color;
-  if (minDist >= 5) {
+  if (minDist >= wideOpenDist) {
     level = 3; label = 'Wide Open'; color = '#22c55e';
-  } else if (minDist >= 3) {
+  } else if (minDist >= openDist) {
     level = 2; label = 'Open'; color = '#84cc16';
-  } else if (minDist >= 1.5) {
+  } else if (minDist >= contestedDist) {
     level = 1; label = 'Contested'; color = '#fbbf24';
   } else {
     level = 0; label = 'Covered'; color = '#ef4444';
@@ -1714,44 +1720,66 @@ function resolveCPUDrive(cpuStartPos, posture, difficulty) {
 
   if (roll < turnoverChance) {
     // Turnover
-    let advance = 5 + Math.floor(Math.random() * 21); // rand(5,25)
-    // Cap so CPU doesn't pass player's 10 yard line (cpuYard + advance capped at 90 in CPU coords)
+    let advance = 5 + Math.floor(Math.random() * 21);
     if (cpuYard + advance > 90) advance = 90 - cpuYard;
     if (advance < 0) advance = 0;
     const newCpuYard = cpuYard + advance;
-    const playerBallPos = 100 - newCpuYard; // Convert back to player coords
+    const playerBallPos = 100 - newCpuYard;
+    var toPlays = [];
+    toPlays.push('Run up the middle... ' + (2 + Math.floor(Math.random() * 4)) + ' yards');
+    toPlays.push('Pass attempt... ' + (Math.random() > 0.5 ? 'tipped at the line!' : 'pressure forces a bad throw!'));
+    toPlays.push('TURNOVER! Your defense forces a takeaway!');
     return {
       result: 'turnover',
       cpuScore: 0,
       playerBallPos: clampBallPosition(playerBallPos),
-      driveText: 'TURNOVER! Your defense forces a takeaway!'
+      driveText: 'TURNOVER! Your defense forces a takeaway!',
+      plays: toPlays
     };
   }
 
   if (roll < turnoverChance + tdChance) {
+    var tdPlays = [];
+    tdPlays.push('Run up the middle... ' + (4 + Math.floor(Math.random() * 5)) + ' yards');
+    tdPlays.push('Pass complete over the middle... ' + (8 + Math.floor(Math.random() * 10)) + ' yards');
+    tdPlays.push('Quick slant... first down');
+    tdPlays.push('Play action... receiver wide open downfield!');
+    tdPlays.push('TOUCHDOWN.');
     return {
       result: 'touchdown',
       cpuScore: 7,
       playerBallPos: 25,
-      driveText: 'The opponent marches down the field and scores a TOUCHDOWN.'
+      driveText: 'The opponent marches down the field and scores a TOUCHDOWN.',
+      plays: tdPlays
     };
   }
 
   if (roll < turnoverChance + tdChance + fgChance) {
+    var fgPlays = [];
+    fgPlays.push('Short pass... ' + (3 + Math.floor(Math.random() * 5)) + ' yards');
+    fgPlays.push('Run to the outside... ' + (4 + Math.floor(Math.random() * 6)) + ' yards');
+    fgPlays.push('Pass complete... moving the chains');
+    fgPlays.push('Field goal is GOOD.');
     return {
       result: 'fieldGoal',
       cpuScore: 3,
       playerBallPos: 25,
-      driveText: 'The opponent drives into field goal range and kicks it through. 3 points.'
+      driveText: 'The opponent drives into field goal range and kicks it through. 3 points.',
+      plays: fgPlays
     };
   }
 
   // 3-and-out
+  var taoPlays = [];
+  taoPlays.push('Run stuffed... ' + Math.floor(Math.random() * 2) + ' yards');
+  taoPlays.push('Pass incomplete...');
+  taoPlays.push('Short gain... not enough. Punt.');
   return {
     result: 'threeAndOut',
     cpuScore: 0,
     playerBallPos: 25,
-    driveText: 'Your defense holds! The opponent goes three-and-out.'
+    driveText: 'Your defense holds! The opponent goes three-and-out.',
+    plays: taoPlays
   };
 }
 
@@ -2077,6 +2105,10 @@ const INITIAL_STATE = {
 
   // Contact
   contactDefenderId: null,
+  scrambledOut: false,
+
+  // Progression
+  deepPassCount: 0,
 
   // Result
   lastResult: null,
@@ -2097,6 +2129,8 @@ const INITIAL_STATE = {
   cpuBallPos: 75,
   postureChoice: null,
   cpuDriveResult: null,
+  cpuDrivePlays: [],
+  cpuDrivePlayIndex: 0,
   cpuResultNextPhase: null,
   cpuResultNextQuarter: null,
 
@@ -2371,6 +2405,10 @@ function gameReducerCore(state, action) {
         phase: 'PRESNAP',
         expandedPlayId: null,
         fieldAlert: showMatchup ? (matchupLabel + ' matchup vs ' + (defObj ? defObj.name : defense)) : null,
+        scrambledOut: false,
+        showCommentary: false,
+        danComment: '',
+        kikiComment: '',
       };
     }
 
@@ -2618,6 +2656,7 @@ function gameReducerCore(state, action) {
           yacMoves: 0,
           isYAC: false,
           tacklesBroken: 0,
+          scrambledOut: true,
         };
       }
 
@@ -2955,7 +2994,7 @@ function gameReducerCore(state, action) {
       const recPos = state.currentReceiverPos[targetKey];
       if (!recPos) return state;
 
-      const openness = calculateReceiverOpenness(recPos, state.currentDefenderPos);
+      const openness = calculateReceiverOpenness(recPos, state.currentDefenderPos, state.difficulty);
       const updatedHoldData = state.holdTimeData.map(m => {
         const copy = { ...m };
         updateMatchupIntegrity(copy, state.currentPhase);
@@ -3226,6 +3265,25 @@ function gameReducerCore(state, action) {
       let newYacMoves = state.isYAC ? state.yacMoves + 1 : 0;
       let newSprintCount = state.sprintCount + (genericType === 'Sprint' ? 1 : 0);
 
+      // Enforce YAC limit
+      if (state.isYAC && newYacMoves > state.maxYacMoves) {
+        var totalYards = Math.round(state.carrierXY.y);
+        var playName = play ? play.name : 'play';
+        var defName = state.chosenDefense || 'base43';
+        var commCat = totalYards >= 10 ? 'bigRun' : (totalYards > 0 ? 'shortRun' : 'runStuffed');
+        var comm = pickCommentary(commCat, { yards: totalYards, play: playName, def: defName });
+        return {
+          ...state,
+          phase: 'RESULT',
+          lastResult: { type: 'run', yards: totalYards, turnover: false },
+          resultText: 'Brought down after the catch! ' + (totalYards > 0 ? 'Gain of ' + totalYards + ' yards.' : 'No gain.'),
+          resultColor: totalYards >= 5 ? '#22c55e' : (totalYards > 0 ? '#eab308' : '#ef4444'),
+          showCommentary: true,
+          danComment: comm.dan,
+          kikiComment: comm.kiki,
+        };
+      }
+
       if (runResult.success) {
         // Move carrier based on move type
         switch (genericType) {
@@ -3325,33 +3383,33 @@ function gameReducerCore(state, action) {
       var carrierGain = newCarrierXY.y - carrierPos.y;
       const newDefenders = advanceDefenders(defenders, newCarrierXY, state.difficulty, newRunMoves, carrierGain);
 
-      // Check for contact trigger (nearest defender within 1.5 yards)
+      // Dive forward ALWAYS ends the play — no proximity check
+      if (genericType === 'DiveForward') {
+        const totalYards = Math.round(newCarrierXY.y);
+        const playName = play ? play.name : 'play';
+        const defName = state.chosenDefense || 'base43';
+        const commCat = totalYards >= 10 ? 'bigRun' : (totalYards > 0 ? 'shortRun' : 'runStuffed');
+        const comm = pickCommentary(commCat, { yards: totalYards, play: playName, def: defName });
+        return {
+          ...state,
+          phase: 'RESULT',
+          carrierXY: newCarrierXY,
+          currentDefenderPos: newDefenders,
+          lastResult: { type: 'run', yards: totalYards, turnover: false },
+          resultText: (totalYards > 0 ? 'Gain of ' + totalYards + ' yards.' : 'No gain.') + ' Safe stop.',
+          resultColor: totalYards >= 5 ? '#22c55e' : (totalYards > 0 ? '#eab308' : '#ef4444'),
+          showCommentary: true,
+          danComment: comm.dan,
+          kikiComment: comm.kiki,
+          runMoves: newRunMoves,
+          yacMoves: newYacMoves,
+        };
+      }
+
+      // Check for contact trigger (nearest defender within 2.0 yards)
       const nearestDef = findNearestDefender(newCarrierXY, newDefenders);
       if (nearestDef && nearestDef.distance < 2.0) {
-        // Dive forward = safe stop, no contact
-        if (genericType === 'DiveForward') {
-          const totalYards = Math.round(newCarrierXY.y);
-          const playName = play ? play.name : 'play';
-          const defName = state.chosenDefense || 'base43';
-          const commCat = totalYards >= 10 ? 'bigRun' : (totalYards > 0 ? 'shortRun' : 'runStuffed');
-          const comm = pickCommentary(commCat, { yards: totalYards, play: playName, def: defName });
-          return {
-            ...state,
-            phase: 'RESULT',
-            carrierXY: newCarrierXY,
-            currentDefenderPos: newDefenders,
-            lastResult: { type: 'run', yards: totalYards, turnover: false },
-            resultText: (totalYards > 0 ? 'Gain of ' + totalYards + ' yards.' : 'No gain.') + ' Safe stop.',
-            resultColor: totalYards >= 5 ? '#22c55e' : (totalYards > 0 ? '#eab308' : '#ef4444'),
-            showCommentary: true,
-            danComment: comm.dan,
-            kikiComment: comm.kiki,
-            runMoves: newRunMoves,
-            yacMoves: newYacMoves,
-          };
-        }
-
-        // Otherwise trigger contact
+        // Trigger contact
         return {
           ...state,
           phase: 'CONTACT',
@@ -3383,6 +3441,26 @@ function gameReducerCore(state, action) {
       const moveType = action.moveType;
       const play = PLAYS.find(p => p.id === state.selectedPlayId);
       const params = DIFFICULTY_PARAMS[state.difficulty];
+
+      // Scramble fumble risk: 40-50% fumble chance on any contact
+      if (state.scrambledOut) {
+        var scrambleFumbleChance = 0.40 + Math.random() * 0.10;
+        if (Math.random() < scrambleFumbleChance) {
+          var totalYardsScr = Math.round(state.carrierXY.y);
+          var commScr = pickCommentary('fumble', { yards: totalYardsScr, play: play ? play.name : 'play', def: state.chosenDefense || 'base43' });
+          return {
+            ...state,
+            phase: 'RESULT',
+            lastResult: { type: 'fumble', yards: totalYardsScr, turnover: true },
+            resultText: 'FUMBLE! QB scrambled and lost the ball! Turnover!',
+            resultColor: '#ef4444',
+            showCommentary: true,
+            danComment: commScr.dan,
+            kikiComment: commScr.kiki,
+            scrambledOut: false,
+          };
+        }
+      }
 
       // Force tackle after 2 contacts — no more chain
       if (state.tacklesBroken >= 2) {
@@ -3550,6 +3628,12 @@ function gameReducerCore(state, action) {
     case 'NEXT_PLAY': {
       const result = state.lastResult;
       if (!result) return { ...state, phase: 'MENU' };
+
+      // Increment deep pass count for progressive Look introduction
+      var _deepPlayIds = ['deepPost', 'fourVerticals', 'teSeam', 'playAction', 'flea'];
+      var _newDeepPassCount = state.deepPassCount || 0;
+      if (_deepPlayIds.indexOf(state.selectedPlayId) !== -1) _newDeepPassCount++;
+      state = { ...state, deepPassCount: _newDeepPassCount };
 
       const yards = result.yards || 0;
       let newBallPos = clampBallPosition(state.ballPos + yards);
@@ -3927,6 +4011,8 @@ function gameReducerCore(state, action) {
         ...state,
         phase: 'CPU_DRIVING',
         postureChoice: action.posture,
+        cpuDrivePlays: [],
+        cpuDrivePlayIndex: 0,
       };
     }
 
@@ -3937,50 +4023,68 @@ function gameReducerCore(state, action) {
       const posture = state.postureChoice;
       const driveResult = resolveCPUDrive(state.cpuBallPos, posture, state.difficulty);
 
-      // Update CPU score
-      const newCpuScore = state.twoPlayerMode
-        ? (state.activeOffense === 1 ? state.p2Score : state.p1Score) + driveResult.cpuScore
-        : state.cpuScore + driveResult.cpuScore;
-
-      const playerBallPos = clampBallPosition(driveResult.playerBallPos);
-
-      const comm = pickCommentary('cpuDrive', {});
-      const coachAdvice = state.coach ? pickCoachAdvice(state.coach, 'postureDebrief') : '';
-
-      let newPossessions = state.totalPossessions + 1;
-      let newPossessionsQ = state.possessionsThisQuarter + 1;
-      const quarterResult = checkQuarterAdvance(state.quarter, newPossessionsQ, newPossessions);
-
-      const scoreUpdate = state.twoPlayerMode
-        ? (state.activeOffense === 1
-          ? { p2Score: newCpuScore }
-          : { p1Score: newCpuScore })
-        : { cpuScore: newCpuScore };
-
+      // Store drive result and start play-by-play stepping
       return {
         ...state,
-        ...scoreUpdate,
-        phase: 'CPU_RESULT',
-        postureChoice: posture,
         cpuDriveResult: driveResult,
-        cpuResultNextPhase: quarterResult.phase || 'MENU',
-        cpuResultNextQuarter: quarterResult.quarter || state.quarter,
-        ballPos: playerBallPos,
-        down: 1,
-        dist: 10,
-        totalPossessions: newPossessions,
-        possessionsThisQuarter: newPossessionsQ,
-        quarter: quarterResult.quarter || state.quarter,
-        selectedPlayId: null,
-        selectedCategory: null,
-        showCommentary: false,
-        danComment: driveResult.driveText,
-        kikiComment: comm.kiki,
-        coachAdvice: coachAdvice,
-        fieldAlert: null,
-        lastResult: null,
-        chosenDefense: null,
+        cpuDrivePlays: driveResult.plays || [],
+        cpuDrivePlayIndex: 0,
       };
+    }
+
+    case 'CPU_DRIVE_NEXT_PLAY': {
+      var nextPlayIdx = (state.cpuDrivePlayIndex || 0) + 1;
+      if (nextPlayIdx >= (state.cpuDrivePlays || []).length) {
+        // Drive complete — resolve to CPU_RESULT
+        var driveResult2 = state.cpuDriveResult;
+        if (!driveResult2) return { ...state, phase: 'CPU_RESULT' };
+
+        var newCpuScore2 = state.twoPlayerMode
+          ? (state.activeOffense === 1 ? state.p2Score : state.p1Score) + driveResult2.cpuScore
+          : state.cpuScore + driveResult2.cpuScore;
+
+        var playerBallPos2 = clampBallPosition(driveResult2.playerBallPos);
+
+        var comm3 = pickCommentary('cpuDrive', {});
+        var coachAdvice3 = state.coach ? pickCoachAdvice(state.coach, 'postureDebrief') : '';
+
+        var newPossessions2 = state.totalPossessions + 1;
+        var newPossessionsQ2 = state.possessionsThisQuarter + 1;
+        var quarterResult2 = checkQuarterAdvance(state.quarter, newPossessionsQ2, newPossessions2);
+
+        var scoreUpdate2 = state.twoPlayerMode
+          ? (state.activeOffense === 1
+            ? { p2Score: newCpuScore2 }
+            : { p1Score: newCpuScore2 })
+          : { cpuScore: newCpuScore2 };
+
+        return {
+          ...state,
+          ...scoreUpdate2,
+          phase: 'CPU_RESULT',
+          postureChoice: state.postureChoice,
+          cpuDriveResult: driveResult2,
+          cpuResultNextPhase: quarterResult2.phase || 'MENU',
+          cpuResultNextQuarter: quarterResult2.quarter || state.quarter,
+          ballPos: playerBallPos2,
+          down: 1,
+          dist: 10,
+          totalPossessions: newPossessions2,
+          possessionsThisQuarter: newPossessionsQ2,
+          quarter: quarterResult2.quarter || state.quarter,
+          selectedPlayId: null,
+          selectedCategory: null,
+          showCommentary: false,
+          danComment: driveResult2.driveText,
+          kikiComment: comm3.kiki,
+          coachAdvice: coachAdvice3,
+          fieldAlert: null,
+          lastResult: null,
+          chosenDefense: null,
+        };
+      }
+      // Still stepping through plays
+      return { ...state, cpuDrivePlayIndex: nextPlayIdx };
     }
 
     // ----------------------------------------------------------
@@ -4042,9 +4146,60 @@ function gameReducerCore(state, action) {
         return state;
       }
 
-      // RUNNER: turn-based only, no real-time movement
+      // RUNNER: defenders converge on carrier every tick — inaction gets you tackled
       if (state.phase === 'RUNNER') {
-        return state;
+        var tickCarrier = state.carrierXY;
+        var tickDifficulty = state.difficulty;
+        var tickDefs = state.currentDefenderPos;
+
+        var convergeFraction = {
+          practice: 0.15,
+          preseason: 0.20,
+          regular: 0.35,
+          playoffs: 0.50
+        };
+        var fraction = convergeFraction[tickDifficulty] || 0.25;
+
+        var xScale = 0.53;
+        var newTickDefs = [];
+        for (var tdi = 0; tdi < tickDefs.length; tdi++) {
+          var td = Object.assign({}, tickDefs[tdi]);
+          var tdx = (tickCarrier.x - td.x) * xScale;
+          var tdy = tickCarrier.y - td.y;
+          var tdist = Math.sqrt(tdx * tdx + tdy * tdy);
+          if (tdist > 1.0) {
+            td.x += (tdx / tdist) * fraction / xScale;
+            td.y += (tdy / tdist) * fraction;
+          }
+          newTickDefs.push(td);
+        }
+
+        // Check if any defender is now within auto-tackle range
+        var autoTackleRange = 1.2;
+        var autoTackled = false;
+        for (var ati = 0; ati < newTickDefs.length; ati++) {
+          var atd = newTickDefs[ati];
+          var atdx = (tickCarrier.x - atd.x) * xScale;
+          var atdy = tickCarrier.y - atd.y;
+          var atdist = Math.sqrt(atdx * atdx + atdy * atdy);
+          if (atdist < autoTackleRange) {
+            autoTackled = true;
+            break;
+          }
+        }
+
+        if (autoTackled) {
+          var nearDef = findNearestDefender(tickCarrier, newTickDefs);
+          return {
+            ...state,
+            phase: 'CONTACT',
+            currentDefenderPos: newTickDefs,
+            contactDefenderId: nearDef ? nearDef.id : null,
+            fieldAlert: 'CONTACT!',
+          };
+        }
+
+        return { ...state, currentDefenderPos: newTickDefs };
       }
 
       // CONTACT: small jitter/struggle animation
@@ -5042,7 +5197,7 @@ function GameField({ state, dispatch }) {
       // Skip blockers
       if (play && (play.routes[rk] === 'block')) continue;
 
-      const openness = calculateReceiverOpenness(rp, state.currentDefenderPos);
+      const openness = calculateReceiverOpenness(rp, state.currentDefenderPos, state.difficulty);
       const px = posToPixel(rp.x, rp.y);
 
       opennessLabels.push(
@@ -5811,7 +5966,7 @@ function DecisionScreen({ state, dispatch }) {
     // Skip blockers
     if (play && play.routes[rk] === 'block') continue;
 
-    const openness = calculateReceiverOpenness(recPos, state.currentDefenderPos);
+    const openness = calculateReceiverOpenness(recPos, state.currentDefenderPos, state.difficulty);
     const throwResult = calculateThrowResult(rk, openness.level, pocketNum, state.currentPhase, state.difficulty);
     const hitPct = Math.round(((throwResult.details ? throwResult.details.completionPct : 0) || 0) * 100);
     const intPct = Math.round(((throwResult.details ? throwResult.details.intChance : 0) || 0) * 100);
@@ -5898,6 +6053,9 @@ function DecisionScreen({ state, dispatch }) {
       if (!isRunPlay) {
         var deepPlays = ['deepPost', 'fourVerticals', 'teSeam', 'playAction', 'flea'];
         var showLooks = deepPlays.includes(play && play.id);
+        // Progressive introduction: on Preseason, require 2+ deep passes before showing Look
+        if (showLooks && state.difficulty === 'preseason' && state.deepPassCount < 2) showLooks = false;
+        if (showLooks && state.difficulty === 'practice' && state.deepPassCount < 3) showLooks = false;
         if (showLooks) {
           allMoveButtons.push({ label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' });
           allMoveButtons.push({ label: 'Look Right', move: 'lookRight', color: '#8b5cf6' });
@@ -5920,7 +6078,11 @@ function DecisionScreen({ state, dispatch }) {
 
   // Escape row: Scramble, Throw Away, Tuck — only when pocket < 50% (or survival mode)
   if (showEscape || survivalMode) {
-    var escapeButtons = [
+    var isEasyMode = state.difficulty === 'preseason' || state.difficulty === 'practice';
+    var escapeButtons = isEasyMode ? [
+      { label: '\u{1F91C} Tuck (safe)', move: 'tuck', color: '#dc2626' },
+      { label: '\u{1F3C3} Scramble (risky!)', move: 'scramble', color: '#16a34a' }
+    ] : [
       { label: '\u{1F3C3} Scramble', move: 'scramble', color: '#16a34a' },
       { label: '\u274C Throw Away', move: 'throwAway', color: '#ca8a04' },
       { label: '\u{1F91C} Tuck the Ball', move: 'tuck', color: '#dc2626' }
@@ -5960,11 +6122,20 @@ function DecisionScreen({ state, dispatch }) {
       style: { color: '#ef4444', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', margin: '6px 0', animation: 'pulse 0.8s ease-in-out infinite' }
     }, '\u26A0 SURVIVAL MODE \u2014 Pocket collapsing!') : null,
     null,
-    // Row 2: Throw targets grid
-    React.createElement('div', { className: 'targets-grid' }, targetElements),
-    // Row 3: Movement + Look (merged)
-    moveLookRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, moveLookRow) : null,
-    // Row 4: Escape buttons (only when pocket < 50%)
+    // LAYOUT FLIP: Early phase = QB actions first, receivers muted below
+    //              Later phases = Receivers first (expanded), QB actions below
+    state.currentPhase <= 1 ? React.createElement(React.Fragment, null,
+      // QB action row (dominant)
+      moveLookRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '8px' } }, moveLookRow) : null,
+      // Receiver cards (compressed, muted)
+      React.createElement('div', { className: 'targets-grid', style: { opacity: 0.6, transform: 'scale(0.92)', transformOrigin: 'top center' } }, targetElements)
+    ) : React.createElement(React.Fragment, null,
+      // Receiver cards (full, expanded)
+      React.createElement('div', { className: 'targets-grid' }, targetElements),
+      // QB action row (smaller)
+      moveLookRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, moveLookRow) : null
+    ),
+    // Escape row always at bottom
     escapeRow.length > 0 ? React.createElement('div', { className: 'action-buttons' }, escapeRow) : null
   );
 }
@@ -6080,8 +6251,19 @@ function RunnerScreen({ state, dispatch }) {
     (function(moveData, idx, pct) {
       const isSprint = moveData.type === 'Sprint';
       const sprintFatigued = false;
-      const sprintStamina = isSprint ? (state.sprintCount === 0 ? '\u26A1\u26A1 ' : (state.sprintCount === 1 ? '\u26A1 ' : '')) : '';
-      const btnLabel = sprintStamina + moveData.label;
+      var sprintStamina = '';
+      var sprintLabel = moveData.label;
+      if (isSprint) {
+        if (state.sprintCount === 0) {
+          sprintStamina = '\u26A1\u26A1 ';
+        } else if (state.sprintCount === 1) {
+          sprintStamina = '\u26A1 ';
+        } else {
+          sprintStamina = '\uD83C\uDFC3 ';
+          sprintLabel = 'Run';
+        }
+      }
+      const btnLabel = sprintStamina + sprintLabel;
 
       runButtons.push(
         React.createElement('button', {
@@ -6112,6 +6294,21 @@ function RunnerScreen({ state, dispatch }) {
   }
 
   return React.createElement('div', { style: { padding: '8px', position: 'relative', zIndex: 20 } },
+    // YAC pips — show remaining moves after catch
+    state.isYAC ? React.createElement('div', {
+      style: { display: 'flex', gap: '4px', justifyContent: 'center', marginBottom: '6px' }
+    },
+      Array.from({ length: state.maxYacMoves }, function(_, i) {
+        return React.createElement('span', {
+          key: 'yac-' + i,
+          style: {
+            width: '8px', height: '8px', borderRadius: '50%',
+            background: i < state.yacMoves ? '#ef4444' : '#22c55e',
+            border: '1px solid rgba(255,255,255,0.3)'
+          }
+        });
+      })
+    ) : null,
     React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' } },
       React.createElement('span', { style: { fontWeight: 'bold', fontSize: '15px' } },
         carrierLabel + ' \u2014 MAKE A MOVE'
@@ -6287,10 +6484,11 @@ function CommentaryOverlay({ state, dispatch }) {
     React.createElement('button', {
       onClick: function() { dispatch({ type: 'DISMISS_COMMENTARY' }); },
       style: {
-        position: 'absolute', top: '8px', right: '8px', background: 'none',
-        border: 'none', color: '#888', cursor: 'pointer', fontSize: '16px'
+        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+        color: '#ccc', cursor: 'pointer', fontSize: '12px', padding: '4px 12px',
+        borderRadius: '4px', marginTop: '8px', display: 'block', width: '100%'
       }
-    }, '\u00D7')
+    }, 'Dismiss')
   );
 }
 
@@ -6893,25 +7091,26 @@ function App() {
     }
   }, [state.phase, state.isPaused]);
 
-  // CPU_DRIVING phase timer: resolve CPU drive after 2500ms
+  // CPU_DRIVING phase: resolve drive on first tick, then step through plays
   React.useEffect(function() {
     if (state.phase === 'CPU_DRIVING' && !state.isPaused) {
-      var timer = setTimeout(function() {
-        dispatch({ type: 'RESOLVE_CPU_DRIVE' });
-      }, 2500);
-      return function() { clearTimeout(timer); };
+      if (!state.cpuDrivePlays || state.cpuDrivePlays.length === 0) {
+        // First tick: resolve the drive to generate plays
+        var timer = setTimeout(function() {
+          dispatch({ type: 'RESOLVE_CPU_DRIVE' });
+        }, 400);
+        return function() { clearTimeout(timer); };
+      } else {
+        // Subsequent ticks: step through plays
+        var timer2 = setTimeout(function() {
+          dispatch({ type: 'CPU_DRIVE_NEXT_PLAY' });
+        }, 800);
+        return function() { clearTimeout(timer2); };
+      }
     }
-  }, [state.phase, state.isPaused]);
+  }, [state.phase, state.isPaused, state.cpuDrivePlayIndex, state.cpuDrivePlays]);
 
-  // Commentary delay: auto-dismiss commentary 2750ms after entering RESULT
-  React.useEffect(function() {
-    if (state.phase === 'RESULT' && state.danComment && state.showCommentary) {
-      var timer = setTimeout(function() {
-        dispatch({ type: 'DISMISS_COMMENTARY' });
-      }, 2750);
-      return function() { clearTimeout(timer); };
-    }
-  }, [state.phase, state.danComment, state.showCommentary]);
+  // Commentary stays until player dismisses — no auto-dismiss timer
 
   // THROW_RESOLVE: after ball flight animation (600ms)
   React.useEffect(function() {
@@ -6980,29 +7179,27 @@ function App() {
   }
 
   if (phase === 'CPU_DRIVING') {
+    var currentPlay = (state.cpuDrivePlays && state.cpuDrivePlays.length > 0)
+      ? state.cpuDrivePlays[state.cpuDrivePlayIndex || 0]
+      : 'Opponent driving...';
     return React.createElement('div', { className: 'game-container' },
       React.createElement(Scoreboard, { state: state, dispatch: dispatch }),
       React.createElement('div', {
         style: {
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          height: 'calc(100vh - 60px)', textAlign: 'center'
+          height: 'calc(100vh - 60px)', textAlign: 'center', padding: '0 20px'
         }
       },
         React.createElement('div', {
-          style: {
-            color: '#fbbf24', fontSize: '22px', fontWeight: 'bold',
-            animation: 'pulseGlow 1.2s ease-in-out infinite'
-          }
-        }, 'Opponent driving...'),
+          style: { color: '#ef4444', fontSize: '14px', fontWeight: 'bold', marginBottom: '12px', opacity: 0.7 }
+        }, 'OPPONENT POSSESSION'),
         React.createElement('div', {
-          style: { marginTop: '16px', display: 'flex', gap: '8px' }
-        },
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0.3s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0.6s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '0.9s' } }),
-          React.createElement('span', { className: 'tick-dot', style: { animationDelay: '1.2s' } })
-        )
+          key: 'play-' + (state.cpuDrivePlayIndex || 0),
+          style: {
+            color: '#fbbf24', fontSize: '20px', fontWeight: 'bold',
+            animation: 'fadeIn 0.3s ease-in'
+          }
+        }, currentPlay)
       )
     );
   }
@@ -7054,10 +7251,7 @@ function App() {
       panelContent = React.createElement(ContactScreen, { state: state, dispatch: dispatch });
       break;
     case 'RESULT':
-      panelContent = React.createElement(React.Fragment, null,
-        React.createElement(ResultScreen, { state: state, dispatch: dispatch }),
-        state.showCommentary ? React.createElement(CommentaryOverlay, { state: state, dispatch: dispatch }) : null
-      );
+      panelContent = React.createElement(ResultScreen, { state: state, dispatch: dispatch });
       break;
     case 'TOUCHDOWN':
       return React.createElement('div', { className: 'game-container' },
@@ -7103,15 +7297,16 @@ function App() {
           style: { position: 'relative', width: '100%' }
         },
           React.createElement(GameField, { state: state, dispatch: dispatch }),
+          state.showCommentary ? React.createElement(CommentaryOverlay, { state: state, dispatch: dispatch }) : null,
           React.createElement('div', { className: 'overlay-panel' }, panelContent)
         )
-      : React.createElement(React.Fragment, null,
+      : React.createElement('div', {
+          style: { position: 'relative', width: '100%' }
+        },
           React.createElement(GameField, { state: state, dispatch: dispatch }),
+          state.showCommentary ? React.createElement(CommentaryOverlay, { state: state, dispatch: dispatch }) : null,
           panelContent
         ),
-    state.showCommentary && phase !== 'RESULT'
-      ? React.createElement(CommentaryOverlay, { state: state, dispatch: dispatch })
-      : null,
     state.coachAdvice && phase !== 'PRESNAP' ? React.createElement(CoachAdvice, { state: state }) : null,
     React.createElement(PracticeOverlay, { state: state, dispatch: dispatch }),
     menuBtn,
