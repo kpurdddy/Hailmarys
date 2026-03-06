@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Hail Marys G2.3.0</title>
+<title>Hail Marys G2.4.0</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -667,7 +667,9 @@ const DIFFICULTY_PARAMS = {
     ghostRoutePhases: ['select','presnap','play'],
     showMatchupFeedback: 'all', // full feedback with suggestions
     highlightBestThrow: true,
-    showTeaching: true          // KikiTeach mode
+    showTeaching: true,         // KikiTeach mode
+    defenderCloseRate: 0.5,     // DBs close at 50% speed
+    opennessBonus: 3            // +3 flat openness bonus
   },
   regular: {
     dbTracking: 0.90,        // 90% of WR speed
@@ -1550,6 +1552,10 @@ function calculateReceiverOpenness(receiverPos, allDefenders, difficulty) {
     if (dist < minDist) minDist = dist;
   }
 
+  var params = DIFFICULTY_PARAMS[difficulty];
+  var bonus = (params && params.opennessBonus) ? params.opennessBonus : 0;
+  minDist += bonus;
+
   var isEasy = difficulty === 'practice' || difficulty === 'preseason';
   var wideOpenDist = isEasy ? 4 : 5;
   var openDist = isEasy ? 2.5 : 3;
@@ -1691,9 +1697,9 @@ function resolvePunt(ballPosition) {
   const travel = 35 + Math.floor(Math.random() * 16); // 35 + rand(0,15)
   const landing = ballPosition + travel;
   if (landing >= 100) {
-    return { landingSpot: 80, touchback: true }; // CPU at their 20 = player coord 80
+    return { landingSpot: 80, touchback: true, distance: travel }; // CPU at their 20 = player coord 80
   }
-  return { landingSpot: landing, touchback: false };
+  return { landingSpot: landing, touchback: false, distance: travel };
 }
 
 function resolveCPUDrive(cpuStartPos, posture, difficulty) {
@@ -1931,27 +1937,32 @@ function formatDown(down, distance, ballPos) {
 }
 
 function advanceDefenders(defenders, carrierPos, difficulty, runMoveCount, carrierGain) {
-  const params = DIFFICULTY_PARAMS[difficulty];
-  // Scale defender movement by how far the carrier moved this turn
-  // pursuitSpeed is a ratio: 0.82 in Preseason means defenders cover 82% of carrier's distance
+  var params = DIFFICULTY_PARAMS[difficulty];
   var distBase = (carrierGain !== undefined && carrierGain > 0) ? carrierGain : 3.5;
-  distBase = Math.max(2.5, distBase); // minimum 2.5 so defenders always close in
-  const baseSpeed = params.pursuitSpeed * distBase;
-  let speed = baseSpeed;
+  distBase = Math.max(2.5, distBase);
+  var baseSpeed = params.pursuitSpeed * distBase;
+  var speed = baseSpeed;
   if (runMoveCount > 2) {
     speed = baseSpeed * (1 + 0.15 * (runMoveCount - 2));
   }
 
-  const xScale = 0.53;
-  const newDefenders = [];
-  for (let i = 0; i < defenders.length; i++) {
-    const def = { ...defenders[i] };
-    const dx = (carrierPos.x - def.x) * xScale;
-    const dy = carrierPos.y - def.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+  var carrierPastLOS = carrierPos.y > 0;
+  var xScale = 0.53;
+  var newDefenders = [];
+  for (var i = 0; i < defenders.length; i++) {
+    var def = Object.assign({}, defenders[i]);
+    // LOS gate: only DL advances before carrier crosses LOS
+    var isDL = def.origY !== undefined ? def.origY <= 2 : def.y <= 4;
+    if (!isDL && !carrierPastLOS) {
+      newDefenders.push(def);
+      continue;
+    }
+    var dx = (carrierPos.x - def.x) * xScale;
+    var dy = carrierPos.y - def.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > 0.1) {
-      const moveX = (dx / dist) * speed / xScale;
-      const moveY = (dy / dist) * speed;
+      var moveX = (dx / dist) * speed / xScale;
+      var moveY = (dy / dist) * speed;
       def.x += moveX;
       def.y += moveY;
     }
@@ -2136,6 +2147,15 @@ const INITIAL_STATE = {
 
   // Practice
   overlaysSeen: {},
+  teachingHint: null,
+
+  // Fourth down
+  goForItToggleCount: 0,
+  cameFromFourthDown: false,
+  melificentAttempts: 0,
+
+  // Auto-tackle
+  autoTackleTimer: 0,
 
   // UI
   isPaused: false,
@@ -2189,8 +2209,23 @@ function pickCoachAdvice(coach, situation) {
 // ============================================================
 function gameReducer(state, action) {
   var newState = gameReducerCore(state, action);
+  // Auto-dismiss teaching hints on any game-advancing action
+  var advancingActions = ['SELECT_CATEGORY', 'SELECT_PLAY', 'SNAP', 'QB_ACTION', 'THROW', 'RUNNER_MOVE', 'CONTACT_MOVE', 'NEXT_PLAY', 'POSTURE_PICK', 'RPO_CHOICE', 'FOURTH_DOWN_OPTION'];
+  if (advancingActions.indexOf(action.type) !== -1 && state.difficulty === 'practice') {
+    var hintMap = { MENU: 'welcome', PLAY_SELECT: 'playSelect', PRESNAP: 'presnap', DECISION: 'pocket', RUNNER: 'runAfterCatch', CONTACT: 'runAfterCatch', DEFENSIVE_POSTURE: 'defense' };
+    var hintId = hintMap[state.phase];
+    if (hintId && !state.overlaysSeen[hintId]) {
+      var newSeen = Object.assign({}, newState.overlaysSeen || {});
+      newSeen[hintId] = true;
+      newState = Object.assign({}, newState, { overlaysSeen: newSeen });
+    }
+  }
+  // Auto-dismiss commentary on game-advancing actions
+  if (advancingActions.indexOf(action.type) !== -1 && newState.showCommentary) {
+    newState = Object.assign({}, newState, { showCommentary: false });
+  }
   if (newState !== state && newState.phase !== state.phase) {
-    return { ...newState, cameraMode: 'strategic' };
+    return Object.assign({}, newState, { cameraMode: 'strategic' });
   }
   return newState;
 }
@@ -2324,7 +2359,7 @@ function gameReducerCore(state, action) {
       }
 
       // Defense positions (relative to LOS: y values are already relative)
-      const defPos = defObj ? defObj.players.map(p => ({ ...p })) : [];
+      const defPos = defObj ? defObj.players.map(function(p) { return Object.assign({}, p, { origY: p.y }); }) : [];
 
       // Assign DBs to receivers using greedy proximity
       var assignableReceivers = [];
@@ -2739,6 +2774,16 @@ function gameReducerCore(state, action) {
           break;
         case 'stepUp':
           newQBXY.y += 2;
+          // Step Up restores pocket integrity by 10-15%
+          var stepUpRestore = 10 + Math.floor(Math.random() * 6);
+          for (var sui = 0; sui < state.holdTimeData.length; sui++) {
+            var m = state.holdTimeData[sui];
+            m.integrity = Math.min(100, (m.integrity || 0) + stepUpRestore);
+            if (m.phasesExpired > 0) m.phasesExpired = Math.max(0, m.phasesExpired - 1);
+          }
+          break;
+        case 'wait':
+          // QB holds position. Routes develop, pocket degrades slightly less.
           break;
         case 'lookLeft':
           newLookDir = 'left';
@@ -2812,10 +2857,21 @@ function gameReducerCore(state, action) {
       }
 
       // Update DB positions: assignment-based coverage
-      const dbTracking = params.dbTracking;
-      const dbXScale = 0.53;
-      for (let i = 0; i < newDefPos.length; i++) {
-        const d = newDefPos[i];
+      var closeRate = (params.defenderCloseRate !== undefined) ? params.defenderCloseRate : 1.0;
+      var dbTracking = params.dbTracking * closeRate;
+      var dbXScale = 0.53;
+
+      // Find deepest receiver Y for safety depth reference
+      var deepestRecY = 0;
+      var recKeyList = ['W1', 'W2', 'TE', 'RB'];
+      for (var dri = 0; dri < recKeyList.length; dri++) {
+        if (newRecPos[recKeyList[dri]] && newRecPos[recKeyList[dri]].y > deepestRecY) {
+          deepestRecY = newRecPos[recKeyList[dri]].y;
+        }
+      }
+
+      for (var i = 0; i < newDefPos.length; i++) {
+        var d = newDefPos[i];
         if (d.role === 'CB' || d.role === 'S') {
           if (d.assignedReceiver && newRecPos[d.assignedReceiver]) {
             // Man coverage: track assigned receiver
@@ -2836,19 +2892,38 @@ function gameReducerCore(state, action) {
               }
             }
 
+            // CBs track more aggressively -- multiplier of 7 instead of 5
+            var trackMult = (d.role === 'CB') ? 7 : 5;
             if (dist > 0.5) {
-              d.x += (dx / dist) * trackSpeed * 5 / dbXScale;
-              d.y += (dy / dist) * trackSpeed * 5;
+              d.x += (dx / dist) * trackSpeed * trackMult / dbXScale;
+              d.y += (dy / dist) * trackSpeed * trackMult;
+            }
+
+            // CB cushion: if CB is behind receiver (lower y), close gap faster
+            if (d.role === 'CB' && d.y < target.y - 2) {
+              d.y += 0.8; // Extra forward push to stay with receiver
             }
           } else {
-            // Zone: drift laterally toward QB's x, hold depth
-            var qbDx = newQBXY.x - d.x;
-            if (Math.abs(qbDx) > 2) {
-              d.x += (qbDx > 0 ? 1 : -1) * 0.5;
+            // ZONE SAFETY: maintain depth relative to deepest receiver
+            // Safety stays 3-6 yards BEHIND the deepest receiver, not creeping forward
+            var safetyDepthBehind = 5;
+            var targetSafetyY = deepestRecY + safetyDepthBehind;
+            // Never shallower than 12 yards from LOS
+            targetSafetyY = Math.max(12, targetSafetyY);
+
+            // Drift toward target depth
+            var safetyDy = targetSafetyY - d.y;
+            if (Math.abs(safetyDy) > 1) {
+              d.y += (safetyDy > 0 ? 1 : -1) * 0.8;
             }
-            // Slight forward creep (toward LOS) but don't abandon deep zone
-            if (d.y > 10) {
-              d.y -= 0.2;
+
+            // Lateral drift: split the field, don't cluster
+            // Left safety covers left half, right safety covers right half
+            var fieldCenter = 50;
+            var targetX = d.x < fieldCenter ? 30 : 70;
+            var safetyDx = targetX - d.x;
+            if (Math.abs(safetyDx) > 3) {
+              d.x += (safetyDx > 0 ? 1 : -1) * 0.5;
             }
           }
         }
@@ -2885,13 +2960,41 @@ function gameReducerCore(state, action) {
         }
       }
 
-      // LB slight drift per action
+      // LB zone coverage: track nearest receiver in their zone, not just drift toward QB
       for (var i = 0; i < newDefPos.length; i++) {
         var d = newDefPos[i];
         if (d.role === 'LB') {
-          var lbDy = newQBXY.y - d.y;
-          if (lbDy < 0 && Math.abs(lbDy) > 1) {
-            d.y -= 0.4;
+          // Find nearest receiver to this LB
+          var nearestRecDist = Infinity;
+          var nearestRecPos = null;
+          for (var lri = 0; lri < recKeyList.length; lri++) {
+            var lrk = recKeyList[lri];
+            if (newRecPos[lrk]) {
+              var lrdx = (newRecPos[lrk].x - d.x) * dbXScale;
+              var lrdy = newRecPos[lrk].y - d.y;
+              var lrd = Math.sqrt(lrdx * lrdx + lrdy * lrdy);
+              if (lrd < nearestRecDist) {
+                nearestRecDist = lrd;
+                nearestRecPos = newRecPos[lrk];
+              }
+            }
+          }
+
+          if (nearestRecPos && nearestRecDist < 15) {
+            // Track nearest receiver in zone -- slower than DBs
+            var lbDx = (nearestRecPos.x - d.x) * dbXScale;
+            var lbDy = nearestRecPos.y - d.y;
+            var lbDist = Math.sqrt(lbDx * lbDx + lbDy * lbDy);
+            if (lbDist > 1) {
+              d.x += (lbDx / lbDist) * 1.2 / dbXScale;
+              d.y += (lbDy / lbDist) * 1.2;
+            }
+          } else {
+            // No receiver nearby: drift toward QB slowly
+            var lbQbDy = newQBXY.y - d.y;
+            if (lbQbDy < 0 && Math.abs(lbQbDy) > 1) {
+              d.y -= 0.4;
+            }
           }
         }
       }
@@ -3272,11 +3375,22 @@ function gameReducerCore(state, action) {
         var defName = state.chosenDefense || 'base43';
         var commCat = totalYards >= 10 ? 'bigRun' : (totalYards > 0 ? 'shortRun' : 'runStuffed');
         var comm = pickCommentary(commCat, { yards: totalYards, play: playName, def: defName });
+
+        // Check if a defender is actually close enough to make the stop
+        var nearDef = findNearestDefender(state.carrierXY, state.currentDefenderPos);
+        var tackledByDefender = nearDef && nearDef.distance < 4.0;
+        var yacResultText;
+        if (tackledByDefender) {
+          yacResultText = 'Brought down after the catch! ' + (totalYards > 0 ? 'Gain of ' + totalYards + ' yards.' : 'No gain.');
+        } else {
+          yacResultText = (totalYards > 0 ? 'Gain of ' + totalYards + ' yards.' : 'No gain.') + ' Ran out of steam.';
+        }
+
         return {
           ...state,
           phase: 'RESULT',
           lastResult: { type: 'run', yards: totalYards, turnover: false },
-          resultText: 'Brought down after the catch! ' + (totalYards > 0 ? 'Gain of ' + totalYards + ' yards.' : 'No gain.'),
+          resultText: yacResultText,
           resultColor: totalYards >= 5 ? '#22c55e' : (totalYards > 0 ? '#eab308' : '#ef4444'),
           showCommentary: true,
           danComment: comm.dan,
@@ -3431,6 +3545,7 @@ function gameReducerCore(state, action) {
         yacMoves: newYacMoves,
         sprintCount: newSprintCount,
         fieldAlert: null,
+        autoTackleTimer: 0,
       };
     }
 
@@ -3635,6 +3750,11 @@ function gameReducerCore(state, action) {
       if (_deepPlayIds.indexOf(state.selectedPlayId) !== -1) _newDeepPassCount++;
       state = { ...state, deepPassCount: _newDeepPassCount };
 
+      // Reset melificent counter on any possession change
+      if (result.turnover || result.type === 'touchdown' || result.type === 'safety') {
+        state = { ...state, melificentAttempts: 0, goForItToggleCount: 0 };
+      }
+
       const yards = result.yards || 0;
       let newBallPos = clampBallPosition(state.ballPos + yards);
       let newDown = state.down;
@@ -3747,6 +3867,18 @@ function gameReducerCore(state, action) {
         };
       }
 
+      // Melificent pity: give the down back, stay on 4th down
+      if (result.type === 'melificent_pity') {
+        return {
+          ...state,
+          phase: 'FOURTH_DOWN',
+          lastResult: null,
+          showCommentary: false,
+          fieldAlert: null,
+          chosenDefense: null,
+        };
+      }
+
       // Check first down
       const yardsToFirst = state.dist;
       if (yards >= yardsToFirst) {
@@ -3847,144 +3979,127 @@ function gameReducerCore(state, action) {
     // FOURTH_DOWN_OPTION
     // ----------------------------------------------------------
     case 'FOURTH_DOWN_OPTION': {
-      const choice = action.choice;
-      let newPossessions = state.totalPossessions;
-      let newPossessionsQ = state.possessionsThisQuarter;
+      var choice = action.choice;
 
       if (choice === 'punt') {
-        const puntResult = resolvePunt(state.ballPos);
-        newPossessions++;
-        newPossessionsQ++;
-        const quarterResult = checkQuarterAdvance(state.quarter, newPossessionsQ, newPossessions);
-
-        if (state.twoPlayerMode) {
-          return {
-            ...state,
-            phase: quarterResult.phase || 'MENU',
-            activeOffense: state.activeOffense === 1 ? 2 : 1,
-            ballPos: Math.max(1, 100 - puntResult.landingSpot),
-            down: 1,
-            dist: 10,
-            totalPossessions: newPossessions,
-            possessionsThisQuarter: newPossessionsQ,
-            quarter: quarterResult.quarter || state.quarter,
-            selectedPlayId: null,
-            selectedCategory: null,
-            lastResult: null,
-            showCommentary: false,
-            fieldAlert: puntResult.touchback ? 'Punt! Touchback.' : 'Punt!',
-            chosenDefense: null,
-          };
-        }
-
+        var puntResult = resolvePunt(state.ballPos);
+        var puntTargetY = puntResult.landingSpot - state.ballPos;
         return {
           ...state,
-          phase: quarterResult.phase || 'DEFENSIVE_POSTURE',
-          cpuBallPos: puntResult.landingSpot,
-          postureChoice: null,
-          cpuDriveResult: null,
-          totalPossessions: newPossessions,
-          possessionsThisQuarter: newPossessionsQ,
-          quarter: quarterResult.quarter || state.quarter,
-          selectedPlayId: null,
-          selectedCategory: null,
-          lastResult: null,
+          phase: 'KICK_FLIGHT',
+          ballInFlight: true,
+          ballFlightTarget: { x: 50, y: puntTargetY },
+          lastResult: { type: 'punt', landingSpot: puntResult.landingSpot, touchback: puntResult.touchback, distance: puntResult.distance || (puntResult.landingSpot - state.ballPos) },
+          fieldAlert: 'PUNTING...',
           showCommentary: false,
-          fieldAlert: puntResult.touchback ? 'Punt! Touchback.' : 'Punt!',
-          chosenDefense: null,
         };
       }
 
       if (choice === 'fieldGoal') {
-        const fgResult = resolveFieldGoal(state.ballPos);
-        newPossessions++;
-        newPossessionsQ++;
-        const quarterResult = checkQuarterAdvance(state.quarter, newPossessionsQ, newPossessions);
+        var fgResult = resolveFieldGoal(state.ballPos);
+        var fgTargetY = 100 - state.ballPos + 5;
 
-        if (fgResult.made) {
-          const scoreKey = state.twoPlayerMode
-            ? (state.activeOffense === 1 ? 'p1Score' : 'p2Score')
-            : 'playerScore';
-          const newScores = { ...state };
-          newScores[scoreKey] = (state[scoreKey] || 0) + 3;
+        // Melificent check: FG over 60 yards
+        var fgDistance = fgResult.distance;
+        var isMelificent = fgDistance > 60;
+        var melificentCheat = state.goForItToggleCount >= 3;
 
-          if (state.twoPlayerMode) {
-            return {
-              ...newScores,
-              phase: quarterResult.phase || 'MENU',
-              activeOffense: state.activeOffense === 1 ? 2 : 1,
-              ballPos: 25,
-              down: 1,
-              dist: 10,
-              totalPossessions: newPossessions,
-              possessionsThisQuarter: newPossessionsQ,
-              quarter: quarterResult.quarter || state.quarter,
-              selectedPlayId: null,
-              selectedCategory: null,
-              lastResult: null,
-              showCommentary: false,
-              fieldAlert: 'Field Goal is GOOD! ' + fgResult.distance + ' yards. +3 points!',
-              chosenDefense: null,
-            };
-          }
-
-          return {
-            ...newScores,
-            phase: quarterResult.phase || 'DEFENSIVE_POSTURE',
-            cpuBallPos: 75,
-            postureChoice: null,
-            cpuDriveResult: null,
-            totalPossessions: newPossessions,
-            possessionsThisQuarter: newPossessionsQ,
-            quarter: quarterResult.quarter || state.quarter,
-            selectedPlayId: null,
-            selectedCategory: null,
-            lastResult: null,
-            showCommentary: false,
-            fieldAlert: 'Field Goal is GOOD! ' + fgResult.distance + ' yards. +3 points!',
-            chosenDefense: null,
-          };
-        } else {
-          // Missed FG
-          const cpuPos = Math.min(state.ballPos, 99);
-
-          if (state.twoPlayerMode) {
+        if (isMelificent && !melificentCheat) {
+          // Melificent event -- dramatic failure (or 0.01% miracle)
+          var miracleRoll = Math.random();
+          if (miracleRoll < 0.0001) {
+            // Natural miracle -- 0.01% chance
             return {
               ...state,
-              phase: quarterResult.phase || 'MENU',
-              activeOffense: state.activeOffense === 1 ? 2 : 1,
-              ballPos: Math.max(1, 100 - cpuPos),
-              down: 1,
-              dist: 10,
-              totalPossessions: newPossessions,
-              possessionsThisQuarter: newPossessionsQ,
-              quarter: quarterResult.quarter || state.quarter,
-              selectedPlayId: null,
-              selectedCategory: null,
-              lastResult: null,
+              phase: 'KICK_FLIGHT',
+              ballInFlight: true,
+              ballFlightTarget: { x: 50, y: fgTargetY },
+              lastResult: { type: 'fieldGoal', made: true, distance: fgDistance, melificent: true, miracle: true },
+              fieldAlert: 'KICK IS UP...',
               showCommentary: false,
-              fieldAlert: 'Field Goal MISSED! ' + fgResult.distance + ' yards.',
-              chosenDefense: null,
             };
           }
 
+          // Pick a random failure message
+          var MELIFICENT_MESSAGES = [
+            "Further... further... it's going... bounces off the crossbar! Oh, so close!",
+            "The kick is up... it's got the distance... and it hooks wide right. Heartbreak.",
+            "That ball is traveling... still going... lands in the parking lot. Wrong direction, but impressive distance.",
+            "It's up! It's got legs! It... hits a bird. Not making this up.",
+            "The kick is away... further... further... bounces into the TV cameras. What a disappointment!",
+            "Really put a foot through this one... and it's gone. Into the stands. Three rows up. Someone's got a souvenir.",
+            "It's got the distance! It's got the height! It's... five yards wide. Close only counts in horseshoes.",
+            "That kick has hang time... serious hang time... still going... it lands on the other side of the field. The wrong other side.",
+            "The ball is up and... oh. Oh no. That's headed for the hot dog vendor.",
+            "Further... further... the crowd is on its feet... and it bounces off the top of the scoreboard. Not even close, but what a kick.",
+            "Crushed it! That ball is flying! And flying... and flying... out of the stadium. Literally out of the stadium.",
+            "The kick is up... it's curving... still curving... that ball just did a U-turn.",
+            "It's got the power! It's got the angle! It's... intercepted? Can you intercept a field goal? Apparently yes.",
+            "That ball sailed over the crossbar... and over the stands... and over the parking lot. Never seeing that ball again.",
+            "It's up! Looking good! Looking GREAT! And... it bounces off the mascot. Right off his head.",
+            "The kick is away and it's... actually, where did it go? Did anyone see where it went?"
+          ];
+          var melMsg = MELIFICENT_MESSAGES[Math.floor(Math.random() * MELIFICENT_MESSAGES.length)];
+
+          // Pity mechanic: per possession, first attempt gives the down back
+          var melAttempts = (state.melificentAttempts || 0) + 1;
+          if (melAttempts <= 1) {
+            // First attempt this possession: wry commentary, give the down back
+            return {
+              ...state,
+              phase: 'RESULT',
+              lastResult: { type: 'melificent_pity', yards: 0, turnover: false },
+              resultText: melMsg,
+              resultColor: '#f59e0b',
+              showCommentary: true,
+              danComment: melMsg,
+              kikiComment: "Hey, you miss 100% of the shots you don't take. The defense is giving the down back.",
+              melificentAttempts: melAttempts,
+              fieldAlert: null,
+            };
+          } else {
+            // Second+ attempt same possession: real turnover
+            return {
+              ...state,
+              phase: 'RESULT',
+              lastResult: { type: 'fieldGoal', made: false, distance: fgDistance, yards: 0, turnover: true },
+              resultText: melMsg,
+              resultColor: '#ef4444',
+              showCommentary: true,
+              danComment: melMsg,
+              kikiComment: "That's a turnover. Brutal field position for the opponent.",
+              cpuBallPos: Math.min(state.ballPos, 99),
+              melificentAttempts: melAttempts,
+              fieldAlert: null,
+            };
+          }
+        }
+
+        // Melificent cheat code: guaranteed success
+        if (isMelificent && melificentCheat) {
           return {
             ...state,
-            phase: quarterResult.phase || 'DEFENSIVE_POSTURE',
-            cpuBallPos: cpuPos,
-            postureChoice: null,
-            cpuDriveResult: null,
-            totalPossessions: newPossessions,
-            possessionsThisQuarter: newPossessionsQ,
-            quarter: quarterResult.quarter || state.quarter,
-            selectedPlayId: null,
-            selectedCategory: null,
-            lastResult: null,
+            phase: 'KICK_FLIGHT',
+            ballInFlight: true,
+            ballFlightTarget: { x: 50, y: fgTargetY },
+            lastResult: { type: 'fieldGoal', made: true, distance: fgDistance, melificent: true, cheat: true },
+            fieldAlert: 'KICK IS UP...',
             showCommentary: false,
-            fieldAlert: 'Field Goal MISSED! ' + fgResult.distance + ' yards.',
-            chosenDefense: null,
+            goForItToggleCount: 0,
           };
         }
+
+        // Normal field goal
+        return {
+          ...state,
+          phase: 'KICK_FLIGHT',
+          ballInFlight: true,
+          ballFlightTarget: { x: 50, y: fgTargetY },
+          lastResult: { type: 'fieldGoal', made: fgResult.made, distance: fgDistance },
+          fieldAlert: 'KICK IS UP...',
+          showCommentary: false,
+          goForItToggleCount: 0,
+        };
       }
 
       if (choice === 'goForIt') {
@@ -3997,10 +4112,206 @@ function gameReducerCore(state, action) {
           showCommentary: false,
           fieldAlert: 'Going for it on 4th down!',
           chosenDefense: null,
+          cameFromFourthDown: true,
+          goForItToggleCount: (state.goForItToggleCount || 0) + 1,
+        };
+      }
+
+      if (choice === 'back') {
+        return {
+          ...state,
+          phase: 'FOURTH_DOWN',
+          cameFromFourthDown: false,
+          goForItToggleCount: (state.goForItToggleCount || 0),
         };
       }
 
       return state;
+    }
+
+    // ----------------------------------------------------------
+    // KICK_RESOLVE
+    // ----------------------------------------------------------
+    case 'KICK_RESOLVE': {
+      var result = state.lastResult;
+
+      if (result.type === 'punt') {
+        var cpuRecoveryPos = result.touchback ? 80 : result.landingSpot;
+        var puntDist = result.distance;
+        var puntDan = "High kick... " + puntDist + " yard punt" + (result.touchback ? " into the end zone. Touchback." : ".");
+
+        var newPossessions = state.totalPossessions + 1;
+        var newPossessionsQ = state.possessionsThisQuarter + 1;
+        var quarterResult = checkQuarterAdvance(state.quarter, newPossessionsQ, newPossessions);
+
+        if (state.twoPlayerMode) {
+          return {
+            ...state,
+            ballInFlight: false,
+            phase: quarterResult.phase || 'MENU',
+            activeOffense: state.activeOffense === 1 ? 2 : 1,
+            ballPos: Math.max(1, 100 - result.landingSpot),
+            down: 1,
+            dist: 10,
+            totalPossessions: newPossessions,
+            possessionsThisQuarter: newPossessionsQ,
+            quarter: quarterResult.quarter || state.quarter,
+            lastResult: { type: 'punt', yards: puntDist, turnover: true, landingSpot: result.landingSpot, touchback: result.touchback },
+            resultText: result.touchback ? 'Punt! Touchback.' : 'Punt of ' + puntDist + ' yards.',
+            resultColor: '#3b82f6',
+            showCommentary: true,
+            danComment: puntDan,
+            kikiComment: "Flipping field position. Smart play.",
+            selectedPlayId: null,
+            selectedCategory: null,
+            chosenDefense: null,
+            fieldAlert: null,
+          };
+        }
+
+        return {
+          ...state,
+          ballInFlight: false,
+          phase: 'RESULT',
+          lastResult: { type: 'punt', yards: puntDist, turnover: true, landingSpot: result.landingSpot, touchback: result.touchback },
+          resultText: result.touchback ? 'Punt! Touchback.' : 'Punt of ' + puntDist + ' yards.',
+          resultColor: '#3b82f6',
+          showCommentary: true,
+          danComment: puntDan,
+          kikiComment: "Flipping field position. Smart play.",
+          cpuBallPos: cpuRecoveryPos,
+          fieldAlert: null,
+        };
+      }
+
+      if (result.type === 'fieldGoal') {
+        if (result.made) {
+          var scoreKey = state.twoPlayerMode ? (state.activeOffense === 1 ? 'p1Score' : 'p2Score') : 'playerScore';
+          var fgNewState = { ...state };
+          fgNewState[scoreKey] = (state[scoreKey] || 0) + 3;
+
+          var fgDan = result.melificent
+            ? "It's up... it's going... IT IS GOOD! FROM " + result.distance + " YARDS! UNBELIEVABLE!"
+            : "The kick is up... and it is GOOD! From " + result.distance + " yards out!";
+          var fgKiki = result.melificent
+            ? "I have NEVER seen anything like that. " + result.distance + " yards. That is IMPOSSIBLE."
+            : "Taking the points. Good call.";
+
+          var newPossessions = state.totalPossessions + 1;
+          var newPossessionsQ = state.possessionsThisQuarter + 1;
+          var quarterResult = checkQuarterAdvance(state.quarter, newPossessionsQ, newPossessions);
+
+          if (state.twoPlayerMode) {
+            return {
+              ...fgNewState,
+              ballInFlight: false,
+              phase: result.melificent ? 'TOUCHDOWN' : (quarterResult.phase || 'MENU'),
+              activeOffense: state.activeOffense === 1 ? 2 : 1,
+              ballPos: 25,
+              down: 1,
+              dist: 10,
+              totalPossessions: newPossessions,
+              possessionsThisQuarter: newPossessionsQ,
+              quarter: quarterResult.quarter || state.quarter,
+              lastResult: { type: 'fieldGoal', made: true, yards: 0, turnover: true, distance: result.distance, melificent: result.melificent },
+              resultText: result.melificent
+                ? 'FIELD GOAL IS GOOD! ' + result.distance + ' YARDS! THE IMPOSSIBLE KICK!'
+                : 'FIELD GOAL IS GOOD! ' + result.distance + ' yards. +3 points!',
+              resultColor: result.melificent ? 'gold' : '#eab308',
+              showCommentary: true,
+              danComment: fgDan,
+              kikiComment: fgKiki,
+              selectedPlayId: null,
+              selectedCategory: null,
+              chosenDefense: null,
+              fieldAlert: null,
+            };
+          }
+
+          return {
+            ...fgNewState,
+            ballInFlight: false,
+            phase: result.melificent ? 'TOUCHDOWN' : 'RESULT',
+            lastResult: { type: 'fieldGoal', made: true, yards: 0, turnover: true, distance: result.distance, melificent: result.melificent },
+            resultText: result.melificent
+              ? 'FIELD GOAL IS GOOD! ' + result.distance + ' YARDS! THE IMPOSSIBLE KICK!'
+              : 'FIELD GOAL IS GOOD! ' + result.distance + ' yards. +3 points!',
+            resultColor: result.melificent ? 'gold' : '#eab308',
+            showCommentary: true,
+            danComment: fgDan,
+            kikiComment: fgKiki,
+            cpuBallPos: 75,
+            fieldAlert: null,
+          };
+        } else {
+          var cpuPos = Math.min(state.ballPos, 99);
+          var newPossessions = state.totalPossessions + 1;
+          var newPossessionsQ = state.possessionsThisQuarter + 1;
+          var quarterResult = checkQuarterAdvance(state.quarter, newPossessionsQ, newPossessions);
+
+          if (state.twoPlayerMode) {
+            return {
+              ...state,
+              ballInFlight: false,
+              phase: quarterResult.phase || 'MENU',
+              activeOffense: state.activeOffense === 1 ? 2 : 1,
+              ballPos: Math.max(1, 100 - cpuPos),
+              down: 1,
+              dist: 10,
+              totalPossessions: newPossessions,
+              possessionsThisQuarter: newPossessionsQ,
+              quarter: quarterResult.quarter || state.quarter,
+              lastResult: { type: 'fieldGoal', made: false, yards: 0, turnover: true, distance: result.distance },
+              resultText: 'FIELD GOAL MISSED! ' + result.distance + ' yards.',
+              resultColor: '#ef4444',
+              showCommentary: true,
+              danComment: "The kick is up... and it's NO GOOD! Missed it wide!",
+              kikiComment: "Empty possession. Opponent gets great field position.",
+              selectedPlayId: null,
+              selectedCategory: null,
+              chosenDefense: null,
+              fieldAlert: null,
+            };
+          }
+
+          return {
+            ...state,
+            ballInFlight: false,
+            phase: 'RESULT',
+            lastResult: { type: 'fieldGoal', made: false, yards: 0, turnover: true, distance: result.distance },
+            resultText: 'FIELD GOAL MISSED! ' + result.distance + ' yards.',
+            resultColor: '#ef4444',
+            showCommentary: true,
+            danComment: "The kick is up... and it's NO GOOD! Missed it wide!",
+            kikiComment: "Empty possession. Opponent gets great field position.",
+            cpuBallPos: cpuPos,
+            fieldAlert: null,
+          };
+        }
+      }
+      return state;
+    }
+
+    // ----------------------------------------------------------
+    // FOURTH_DOWN_BACK — return to MENU from 4th down screen
+    // ----------------------------------------------------------
+    case 'FOURTH_DOWN_BACK': {
+      return {
+        ...state,
+        phase: 'FOURTH_DOWN',
+        goForItToggleCount: (state.goForItToggleCount || 0),
+      };
+    }
+
+    // ----------------------------------------------------------
+    // BACK_TO_FOURTH_DOWN — return to 4th down from MENU
+    // ----------------------------------------------------------
+    case 'BACK_TO_FOURTH_DOWN': {
+      return {
+        ...state,
+        phase: 'FOURTH_DOWN',
+        cameFromFourthDown: false,
+      };
     }
 
     // ----------------------------------------------------------
@@ -4160,10 +4471,19 @@ function gameReducerCore(state, action) {
         };
         var fraction = convergeFraction[tickDifficulty] || 0.25;
 
+        // Carrier past LOS (y > 0) triggers full pursuit for all defenders
+        var carrierPastLOS = tickCarrier.y > 0;
+
         var xScale = 0.53;
         var newTickDefs = [];
         for (var tdi = 0; tdi < tickDefs.length; tdi++) {
           var td = Object.assign({}, tickDefs[tdi]);
+          // DL (y <= 2 at snap) always moves; LB/secondary gated behind LOS until carrier crosses
+          var isDL = td.origY !== undefined ? td.origY <= 2 : td.y <= 4;
+          if (!isDL && !carrierPastLOS) {
+            newTickDefs.push(td);
+            continue;
+          }
           var tdx = (tickCarrier.x - td.x) * xScale;
           var tdy = tickCarrier.y - td.y;
           var tdist = Math.sqrt(tdx * tdx + tdy * tdy);
@@ -4196,28 +4516,74 @@ function gameReducerCore(state, action) {
             currentDefenderPos: newTickDefs,
             contactDefenderId: nearDef ? nearDef.id : null,
             fieldAlert: 'CONTACT!',
+            autoTackleTimer: 0,
           };
         }
 
-        return { ...state, currentDefenderPos: newTickDefs };
+        // Auto-tackle countdown: if any defender within 2.0 yards, increment timer
+        var closeThreat = false;
+        for (var cti = 0; cti < newTickDefs.length; cti++) {
+          var ctd = newTickDefs[cti];
+          var ctdx = (tickCarrier.x - ctd.x) * xScale;
+          var ctdy = tickCarrier.y - ctd.y;
+          var ctdist = Math.sqrt(ctdx * ctdx + ctdy * ctdy);
+          if (ctdist < 2.0) { closeThreat = true; break; }
+        }
+        var newAutoTimer = closeThreat ? (state.autoTackleTimer || 0) + 1 : 0;
+        if (newAutoTimer >= 15) {
+          var nearDef2 = findNearestDefender(tickCarrier, newTickDefs);
+          return {
+            ...state,
+            phase: 'CONTACT',
+            currentDefenderPos: newTickDefs,
+            contactDefenderId: nearDef2 ? nearDef2.id : null,
+            fieldAlert: 'TACKLED! Too slow to react!',
+            autoTackleTimer: 0,
+          };
+        }
+
+        return { ...state, currentDefenderPos: newTickDefs, autoTackleTimer: newAutoTimer };
       }
 
-      // CONTACT: small jitter/struggle animation
+      // CONTACT: jitter + gated convergence + auto-tackle timer
       if (state.phase === 'CONTACT') {
-        const jitterCarrier = { ...state.carrierXY };
+        var jitterCarrier = { x: state.carrierXY.x, y: state.carrierXY.y };
         jitterCarrier.x += (Math.random() - 0.5) * 0.8;
         jitterCarrier.y += (Math.random() - 0.5) * 0.4;
 
-        // Other defenders continue converging
-        const newDefPos = state.currentDefenderPos.map(d => {
-          const nd = { ...d };
+        var carrierPastLOS = jitterCarrier.y > 0;
+        var xScale = 0.53;
+
+        // Auto-tackle timer: force result if player idles on contact menu
+        var newAutoTimerContact = (state.autoTackleTimer || 0) + 1;
+        if (newAutoTimerContact >= 25) {
+          var totalYardsAutoContact = Math.round(jitterCarrier.y);
+          return {
+            ...state,
+            phase: 'RESULT',
+            carrierXY: jitterCarrier,
+            lastResult: { type: 'tackle', yards: totalYardsAutoContact, turnover: false },
+            resultText: 'Forward progress stopped! ' + (totalYardsAutoContact > 0 ? 'Gain of ' + totalYardsAutoContact + ' yards.' : 'No gain.'),
+            resultColor: '#ef4444',
+            autoTackleTimer: 0,
+          };
+        }
+
+        // Other defenders converge -- with LOS gating and reduced speed
+        var newDefPos = state.currentDefenderPos.map(function(d) {
+          var nd = Object.assign({}, d);
           if (nd.id !== state.contactDefenderId) {
-            const cdx = (jitterCarrier.x - nd.x) * 0.53;
-            const cdy = jitterCarrier.y - nd.y;
-            const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+            // LOS gate: only DL can cross before carrier does
+            var isDL = nd.origY !== undefined ? nd.origY <= 2 : nd.y <= 4;
+            if (!isDL && !carrierPastLOS) {
+              return nd;
+            }
+            var cdx = (jitterCarrier.x - nd.x) * xScale;
+            var cdy = jitterCarrier.y - nd.y;
+            var cdist = Math.sqrt(cdx * cdx + cdy * cdy);
             if (cdist > 2) {
-              nd.x += (cdx / cdist) * 1.0 / 0.53;
-              nd.y += (cdy / cdist) * 1.0;
+              nd.x += (cdx / cdist) * 0.15 / xScale;
+              nd.y += (cdy / cdist) * 0.15;
             }
           } else {
             // Contact defender jitters with carrier
@@ -4231,6 +4597,7 @@ function gameReducerCore(state, action) {
           ...state,
           carrierXY: jitterCarrier,
           currentDefenderPos: newDefPos,
+          autoTackleTimer: newAutoTimerContact,
         };
       }
 
@@ -4519,7 +4886,7 @@ function GameField({ state, dispatch }) {
 
   // Sound effects — triggered by phase transitions
   React.useEffect(function() {
-    if (state.phase === 'SNAPPING') {
+    if (state.phase === 'SNAPPING' || state.phase === 'KICK_FLIGHT') {
       SoundEngine.play('snap');
     }
     if (state.phase === 'CONTACT') {
@@ -4709,7 +5076,7 @@ function GameField({ state, dispatch }) {
 
   // ---- PLAYER TOKENS ----
   const playerTokens = [];
-  const isActivePlay = ['PRESNAP', 'SNAPPING', 'DECISION', 'RPO_READ', 'RUNNER', 'CONTACT'].includes(state.phase);
+  const isActivePlay = ['PRESNAP', 'SNAPPING', 'DECISION', 'RPO_READ', 'RUNNER', 'CONTACT', 'KICK_FLIGHT'].includes(state.phase);
   const play = state.selectedPlayId ? PLAYS.find(p => p.id === state.selectedPlayId) : null;
   const formation = play ? play.formation : null;
   const instantTokens = state.phase === 'PRESNAP';
@@ -5355,7 +5722,7 @@ function GameField({ state, dispatch }) {
       ) : null,
     state.phase === 'DECISION' ?
       React.createElement('span', { style: { color: '#84cc16', marginLeft: '10px' } },
-        'Phase: ' + state.currentPhase
+        'Actions: ' + state.currentPhase
       ) : null
   );
 
@@ -5451,7 +5818,7 @@ function Scoreboard({ state, dispatch }) {
         ? React.createElement('span', null, ' \u{1F3C8}')
         : null
     ),
-    React.createElement('span', { className: 'game-info' }, "HAIL MARYS G2.3.0" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
+    React.createElement('span', { className: 'game-info' }, "HAIL MARYS G2.4.0" + (state.difficulty ? '  |  ' + state.difficulty.toUpperCase() : '')),
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' } },
       React.createElement('span', { className: 'down-info' }, formatDown(state.down, state.dist, state.ballPos)),
       React.createElement('span', { style: { color: '#aaa' } }, formatFieldPosition(state.ballPos)),
@@ -5635,6 +6002,13 @@ function joeyPortrait() {
 
 function TitleScreen({ dispatch }) {
   const [selectedCoach, setSelectedCoach] = React.useState(null);
+  var diffRef = React.useRef(null);
+
+  React.useEffect(function() {
+    if (selectedCoach && diffRef.current) {
+      diffRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedCoach]);
 
   const coachCard = function(name, title, color, bio) {
     const isSelected = selectedCoach === name;
@@ -5685,7 +6059,7 @@ function TitleScreen({ dispatch }) {
         marginBottom: '8px'
       }
     }, "HAIL MARYS"),
-    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA G2.3.0'),
+    React.createElement('div', { style: { color: '#888', fontSize: '14px', marginBottom: '12px' } }, 'ALPHA G2.4.0'),
     React.createElement('div', {
       style: { color: '#ccc', maxWidth: '420px', margin: '0 auto 6px', fontSize: '15px', fontWeight: 'bold', lineHeight: '1.5' }
     }, 'A turn-based football strategy game.'),
@@ -5708,7 +6082,7 @@ function TitleScreen({ dispatch }) {
     ),
 
     // Step 2: Choose Difficulty (shown after coach pick)
-    selectedCoach ? React.createElement('div', { style: { maxWidth: '380px', margin: '0 auto' } },
+    selectedCoach ? React.createElement('div', { ref: diffRef, style: { maxWidth: '380px', margin: '0 auto' } },
       React.createElement('h2', { style: { color: '#f5a623', fontSize: '18px', marginBottom: '12px' } }, 'Step 2: Choose Difficulty'),
       difficultyBtn('practice', '\u{1F7E2} Practice', '#16a34a',
         'Full teaching mode. Ghost routes, matchup feedback, unlimited audibles.'),
@@ -5774,7 +6148,12 @@ function MenuScreen({ state, dispatch }) {
       className: 'btn',
       onClick: function() { setShowKickOpts(true); },
       style: { background: '#eab308', width: '100%', marginTop: '4px', color: '#000' }
-    }, '\u{1F9B5} KICK OPTIONS') : null
+    }, '\u{1F9B5} KICK OPTIONS') : null,
+    state.cameFromFourthDown ? React.createElement('button', {
+      className: 'btn',
+      onClick: function() { dispatch({ type: 'BACK_TO_FOURTH_DOWN' }); },
+      style: { background: '#555', width: '100%', marginTop: '4px' }
+    }, '\u2190 Back to 4th Down Options') : null
   );
 }
 
@@ -5941,35 +6320,35 @@ function PresnapScreen({ state, dispatch }) {
 // 6. DECISION SCREEN
 // ============================================================
 function DecisionScreen({ state, dispatch }) {
-  const play = PLAYS.find(function(p) { return p.id === state.selectedPlayId; });
-  const params = DIFFICULTY_PARAMS[state.difficulty];
-  const holdData = state.holdTimeData || [];
-  const pocketPct = getPocketPercent(holdData, state.currentPhase);
-  const pocketOverall = pocketPct.overall !== undefined ? pocketPct.overall : (pocketPct >= 0 ? pocketPct : 100);
-  const pocketNum = typeof pocketOverall === 'number' ? pocketOverall : 100;
-  const pocketWarn = getPocketWarning(pocketPct, holdData);
-  const survivalMode = pocketNum < 15;
+  var play = PLAYS.find(function(p) { return p.id === state.selectedPlayId; });
+  var params = DIFFICULTY_PARAMS[state.difficulty];
+  var holdData = state.holdTimeData || [];
+  var pocketPct = getPocketPercent(holdData, state.currentPhase);
+  var pocketOverall = pocketPct.overall !== undefined ? pocketPct.overall : (pocketPct >= 0 ? pocketPct : 100);
+  var pocketNum = typeof pocketOverall === 'number' ? pocketOverall : 100;
+  var pocketWarn = getPocketWarning(pocketPct, holdData);
+  var survivalMode = pocketNum <= 0;
 
   // Build pocket bar color
-  const pocketColor = pocketNum > 60 ? '#22c55e' : (pocketNum > 30 ? '#eab308' : '#ef4444');
+  var pocketColor = pocketNum > 60 ? '#22c55e' : (pocketNum > 30 ? '#eab308' : '#ef4444');
 
   // Calculate receiver openness for each target
-  const receiverKeys = ['W1', 'W2', 'TE', 'RB'];
-  const targets = [];
-  let bestKey = null;
-  let bestOpenness = -1;
+  var receiverKeys = ['W1', 'W2', 'TE', 'RB'];
+  var targets = [];
+  var bestKey = null;
+  var bestOpenness = -1;
+  var isMuted = state.currentPhase === 0;
 
-  for (let ri = 0; ri < receiverKeys.length; ri++) {
-    const rk = receiverKeys[ri];
-    const recPos = state.currentReceiverPos[rk];
+  for (var ri = 0; ri < receiverKeys.length; ri++) {
+    var rk = receiverKeys[ri];
+    var recPos = state.currentReceiverPos[rk];
     if (!recPos) continue;
-    // Skip blockers
     if (play && play.routes[rk] === 'block') continue;
 
-    const openness = calculateReceiverOpenness(recPos, state.currentDefenderPos, state.difficulty);
-    const throwResult = calculateThrowResult(rk, openness.level, pocketNum, state.currentPhase, state.difficulty);
-    const hitPct = Math.round(((throwResult.details ? throwResult.details.completionPct : 0) || 0) * 100);
-    const intPct = Math.round(((throwResult.details ? throwResult.details.intChance : 0) || 0) * 100);
+    var openness = calculateReceiverOpenness(recPos, state.currentDefenderPos, state.difficulty);
+    var throwResult = calculateThrowResult(rk, openness.level, pocketNum, state.currentPhase, state.difficulty);
+    var hitPct = Math.round(((throwResult.details ? throwResult.details.completionPct : 0) || 0) * 100);
+    var intPct = Math.round(((throwResult.details ? throwResult.details.intChance : 0) || 0) * 100);
     var primaryReceiver = play && play.primary === rk;
 
     if (openness.level > bestOpenness) {
@@ -5987,96 +6366,130 @@ function DecisionScreen({ state, dispatch }) {
     });
   }
 
-  const showBestGlow = params.highlightBestThrow;
+  var showBestGlow = params.highlightBestThrow;
 
-  // Target cards
-  const targetElements = [];
-  for (let ti = 0; ti < targets.length; ti++) {
-    const t = targets[ti];
-    // In survival mode, hide if pocket < 15% and openness level is 0
+  // Target cards - TOP of overlay
+  var targetElements = [];
+  for (var ti = 0; ti < targets.length; ti++) {
+    var t = targets[ti];
     if (survivalMode && t.openness.level === 0) continue;
 
-    const isBest = showBestGlow && t.key === bestKey;
-    const isPrimary = t.primaryReceiver;
-    const openClass = t.openness.level >= 3 ? 'open-wide' :
-                      t.openness.level >= 2 ? 'open-moderate' : 'open-tight';
+    var isBest = showBestGlow && t.key === bestKey;
+    var isPrimary = t.primaryReceiver;
+    var cardStyle = {};
 
-    targetElements.push(
-      React.createElement('div', {
-        key: 'tgt-' + t.key,
-        className: 'throw-target ' + openClass + (isBest ? ' best-throw' : ''),
-        onClick: function() { dispatch({ type: 'THROW', targetKey: t.key }); },
-        style: isPrimary ? { boxShadow: '0 0 0 2px gold, ' + (isBest ? '0 0 12px rgba(59,130,246,0.5)' : 'none') } : undefined
-      },
-        React.createElement('div', { className: 'tgt-name' },
-          t.key,
-          isPrimary ? React.createElement('span', {
-            style: { background: 'gold', color: '#000', fontSize: '9px', padding: '1px 4px', borderRadius: '3px', marginLeft: '4px' }
-          }, 'INTENDED') : null
-        ),
+    if (isMuted) {
+      // Phase 0: muted grey cards, no openness/percentages, just names
+      cardStyle = {
+        background: '#1a1a2e', border: '2px solid #444', opacity: 0.6,
+        borderRadius: '8px', padding: '10px', cursor: 'pointer', textAlign: 'center',
+        transition: 'all 0.3s'
+      };
+      if (isPrimary) {
+        cardStyle.border = '2px solid gold';
+        cardStyle.boxShadow = '0 0 8px rgba(255,215,0,0.4)';
+        cardStyle.opacity = 0.8;
+      }
+      targetElements.push(
         React.createElement('div', {
-          style: { color: t.openness.color, fontWeight: 'bold', fontSize: '12px', margin: '4px 0' }
-        }, t.openness.label),
-        React.createElement('div', { className: 'tgt-detail', style: { fontFamily: 'monospace' } },
-          'HIT ' + t.hitPct + '%  INT ' + t.intPct + '%'
+          key: 'tgt-' + t.key,
+          className: 'throw-target',
+          onClick: function(k) { return function() { dispatch({ type: 'THROW', targetKey: k }); }; }(t.key),
+          style: cardStyle
+        },
+          React.createElement('div', { className: 'tgt-name', style: { color: '#888' } }, t.key)
         )
+      );
+    } else {
+      // Phase 1+: full color with openness and percentages
+      var openClass = t.openness.level >= 3 ? 'open-wide' :
+                        t.openness.level >= 2 ? 'open-moderate' : 'open-tight';
+      cardStyle = {};
+      if (isPrimary) {
+        cardStyle.border = '2px solid gold';
+        cardStyle.boxShadow = '0 0 8px rgba(255,215,0,0.4)' + (isBest ? ', 0 0 12px rgba(59,130,246,0.5)' : '');
+      }
+
+      targetElements.push(
+        React.createElement('div', {
+          key: 'tgt-' + t.key,
+          className: 'throw-target ' + openClass + (isBest ? ' best-throw' : ''),
+          onClick: function(k) { return function() { dispatch({ type: 'THROW', targetKey: k }); }; }(t.key),
+          style: Object.keys(cardStyle).length > 0 ? cardStyle : undefined
+        },
+          React.createElement('div', { className: 'tgt-name' }, t.key),
+          React.createElement('div', {
+            style: { color: t.openness.color, fontWeight: 'bold', fontSize: '12px', margin: '4px 0' }
+          }, t.openness.label),
+          React.createElement('div', { className: 'tgt-detail', style: { fontFamily: 'monospace' } },
+            'HIT ' + t.hitPct + '%  INT ' + t.intPct + '%'
+          )
+        )
+      );
+    }
+  }
+
+  // --- QB ACTION BUTTONS (3 core + escape) ---
+  var qbActionRow = [];
+  var escapeRow = [];
+  var showEscape = pocketNum < 50;
+
+  if (!survivalMode) {
+    // Phase-based labels for Drop Back
+    var dropBackLabel = 'Drop Back (Run the Play)';
+    var dropBackSubtitle = null;
+    if (state.currentPhase >= 3) {
+      dropBackLabel = 'Hold On!';
+      dropBackSubtitle = 'Pocket is shaky -- make a decision soon';
+    } else if (state.currentPhase >= 1) {
+      dropBackLabel = 'Buy Time';
+      dropBackSubtitle = 'Receivers getting open';
+    }
+    var isPreseason = state.difficulty === 'preseason' || state.difficulty === 'practice';
+    var dropBackStyle = { background: '#3b82f6', flex: 2, padding: '10px 8px' };
+    if (isPreseason && state.currentPhase === 0) {
+      dropBackStyle.boxShadow = '0 0 12px rgba(59,130,246,0.4)';
+      dropBackStyle.fontSize = '15px';
+    }
+
+    qbActionRow.push(
+      React.createElement('button', {
+        key: 'dropBack',
+        className: 'btn',
+        onClick: function() { dispatch({ type: 'QB_ACTION', move: 'dropBack' }); },
+        style: dropBackStyle
+      },
+        React.createElement('div', { style: { fontWeight: 'bold' } }, dropBackLabel),
+        dropBackSubtitle ? React.createElement('div', { style: { fontSize: '9px', opacity: 0.7 } }, dropBackSubtitle) : null
+      )
+    );
+
+    qbActionRow.push(
+      React.createElement('button', {
+        key: 'stepUp',
+        className: 'btn',
+        onClick: function() { dispatch({ type: 'QB_ACTION', move: 'stepUp' }); },
+        style: { background: '#6366f1', flex: 1, padding: '10px 6px' }
+      },
+        React.createElement('div', { style: { fontWeight: 'bold' } }, 'Step Up'),
+        React.createElement('div', { style: { fontSize: '9px', opacity: 0.7 } }, 'Restore pocket')
+      )
+    );
+
+    qbActionRow.push(
+      React.createElement('button', {
+        key: 'wait',
+        className: 'btn',
+        onClick: function() { dispatch({ type: 'QB_ACTION', move: 'wait' }); },
+        style: { background: '#555', flex: 1, padding: '10px 6px' }
+      },
+        React.createElement('div', { style: { fontWeight: 'bold' } }, 'Wait'),
+        React.createElement('div', { style: { fontSize: '9px', opacity: 0.7 } }, 'Hold position')
       )
     );
   }
 
-  // Action buttons — contextual based on pocket integrity
-  var moveLookRow = [];
-  var escapeRow = [];
-  var showEscape = pocketNum < 50;
-  var isRunPlay = play && play.type === 'run';
-
-  if (!survivalMode) {
-    // At snap (high pocket), show only "Drop Back (Run the Play)" as single movement button
-    if (pocketNum >= 50) {
-      moveLookRow.push(
-        React.createElement('button', {
-          key: 'dropBack',
-          className: 'btn',
-          onClick: function() { dispatch({ type: 'QB_ACTION', move: 'dropBack' }); },
-          style: { background: '#3b82f6', flex: 1 }
-        }, 'Drop Back (Run the Play)')
-      );
-    } else {
-      // Pocket degrading — show full movement options
-      var allMoveButtons = [
-        { label: 'Drop Back', move: 'dropBack', color: '#3b82f6' },
-        { label: 'Roll Left', move: 'rollLeft', color: '#6366f1' },
-        { label: 'Roll Right', move: 'rollRight', color: '#6366f1' },
-        { label: 'Step Up', move: 'stepUp', color: '#3b82f6' }
-      ];
-      // Only show Look buttons on deep pass plays (never on run plays)
-      if (!isRunPlay) {
-        var deepPlays = ['deepPost', 'fourVerticals', 'teSeam', 'playAction', 'flea'];
-        var showLooks = deepPlays.includes(play && play.id);
-        // Progressive introduction: on Preseason, require 2+ deep passes before showing Look
-        if (showLooks && state.difficulty === 'preseason' && state.deepPassCount < 2) showLooks = false;
-        if (showLooks && state.difficulty === 'practice' && state.deepPassCount < 3) showLooks = false;
-        if (showLooks) {
-          allMoveButtons.push({ label: 'Look Left', move: 'lookLeft', color: '#8b5cf6' });
-          allMoveButtons.push({ label: 'Look Right', move: 'lookRight', color: '#8b5cf6' });
-        }
-      }
-      for (var mi = 0; mi < allMoveButtons.length; mi++) {
-        (function(moveData) {
-          moveLookRow.push(
-            React.createElement('button', {
-              key: moveData.move,
-              className: 'btn',
-              onClick: function() { dispatch({ type: 'QB_ACTION', move: moveData.move }); },
-              style: { background: moveData.color, flex: 1 }
-            }, moveData.label)
-          );
-        })(allMoveButtons[mi]);
-      }
-    }
-  }
-
-  // Escape row: Scramble, Throw Away, Tuck — only when pocket < 50% (or survival mode)
+  // Escape row: Scramble, Throw Away, Tuck — when pocket < 50% (or survival mode)
   if (showEscape || survivalMode) {
     var isEasyMode = state.difficulty === 'preseason' || state.difficulty === 'practice';
     var escapeButtons = isEasyMode ? [
@@ -6101,8 +6514,63 @@ function DecisionScreen({ state, dispatch }) {
     }
   }
 
+  // --- Contextual suggestions (Change #4): phase >= 4, no receiver better than contested, pocket > 25% ---
+  var contextualRow = [];
+  if (state.currentPhase >= 4 && pocketNum > 25 && !survivalMode) {
+    var allContested = true;
+    var bestCheckdown = null;
+    var bestCheckdownLevel = -1;
+    for (var ci = 0; ci < targets.length; ci++) {
+      if (targets[ci].openness.level > 1) { allContested = false; break; }
+      if (targets[ci].openness.level > bestCheckdownLevel) {
+        bestCheckdownLevel = targets[ci].openness.level;
+        bestCheckdown = targets[ci];
+      }
+    }
+    if (allContested && bestCheckdown) {
+      var shortLabel = bestCheckdown.key === 'RB' ? 'RB is open underneath' : ('Short pass to ' + bestCheckdown.key);
+      contextualRow.push(
+        React.createElement('button', {
+          key: 'checkdown',
+          className: 'btn',
+          onClick: function() { dispatch({ type: 'THROW', targetKey: bestCheckdown.key }); },
+          style: { background: '#ca8a04', flex: 1, fontSize: '12px' }
+        }, shortLabel)
+      );
+    }
+    // Scramble edge check
+    var qbX = state.quarterbackXY ? state.quarterbackXY.x : 50;
+    var qbY = state.quarterbackXY ? state.quarterbackXY.y : 0;
+    var leftEdgeClear = true;
+    var rightEdgeClear = true;
+    for (var di = 0; di < state.currentDefenderPos.length; di++) {
+      var def = state.currentDefenderPos[di];
+      if (def.x < 15 && Math.abs(def.y - qbY) < 5) leftEdgeClear = false;
+      if (def.x > 85 && Math.abs(def.y - qbY) < 5) rightEdgeClear = false;
+    }
+    if (rightEdgeClear) {
+      contextualRow.push(
+        React.createElement('button', {
+          key: 'scrambleRight',
+          className: 'btn',
+          onClick: function() { dispatch({ type: 'QB_ACTION', move: 'scramble' }); },
+          style: { background: '#16a34a', flex: 1, fontSize: '12px' }
+        }, 'Scramble Right -- edge is open')
+      );
+    } else if (leftEdgeClear) {
+      contextualRow.push(
+        React.createElement('button', {
+          key: 'scrambleLeft',
+          className: 'btn',
+          onClick: function() { dispatch({ type: 'QB_ACTION', move: 'scramble' }); },
+          style: { background: '#16a34a', flex: 1, fontSize: '12px' }
+        }, 'Scramble Left -- edge is open')
+      );
+    }
+  }
+
   return React.createElement('div', { className: 'decision-panel', style: { position: 'relative', zIndex: 20 } },
-    // Row 1: Pocket bar (no QB DECISION header)
+    // Pocket bar
     React.createElement('div', { className: 'pocket-bar-container' },
       React.createElement('span', { className: 'pocket-label' }, 'Pocket'),
       React.createElement('div', { className: 'pocket-bar-bg' },
@@ -6120,22 +6588,14 @@ function DecisionScreen({ state, dispatch }) {
     }, pocketWarn.text) : null,
     survivalMode ? React.createElement('div', {
       style: { color: '#ef4444', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', margin: '6px 0', animation: 'pulse 0.8s ease-in-out infinite' }
-    }, '\u26A0 SURVIVAL MODE \u2014 Pocket collapsing!') : null,
-    null,
-    // LAYOUT FLIP: Early phase = QB actions first, receivers muted below
-    //              Later phases = Receivers first (expanded), QB actions below
-    state.currentPhase <= 1 ? React.createElement(React.Fragment, null,
-      // QB action row (dominant)
-      moveLookRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '8px' } }, moveLookRow) : null,
-      // Receiver cards (compressed, muted)
-      React.createElement('div', { className: 'targets-grid', style: { opacity: 0.6, transform: 'scale(0.92)', transformOrigin: 'top center' } }, targetElements)
-    ) : React.createElement(React.Fragment, null,
-      // Receiver cards (full, expanded)
-      React.createElement('div', { className: 'targets-grid' }, targetElements),
-      // QB action row (smaller)
-      moveLookRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, moveLookRow) : null
-    ),
-    // Escape row always at bottom
+    }, '\u26A0 POCKET COLLAPSED \u2014 Escape now!') : null,
+    // Receiver cards at TOP
+    React.createElement('div', { className: 'targets-grid', style: { marginBottom: '8px' } }, targetElements),
+    // QB action buttons BELOW receivers
+    qbActionRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, qbActionRow) : null,
+    // Contextual suggestions
+    contextualRow.length > 0 ? React.createElement('div', { className: 'action-buttons', style: { marginBottom: '6px' } }, contextualRow) : null,
+    // Escape row at bottom
     escapeRow.length > 0 ? React.createElement('div', { className: 'action-buttons' }, escapeRow) : null
   );
 }
@@ -6249,8 +6709,8 @@ function RunnerScreen({ state, dispatch }) {
     const successPct = Math.round((runResult.rate || 0.5) * 100);
 
     (function(moveData, idx, pct) {
-      const isSprint = moveData.type === 'Sprint';
-      const sprintFatigued = false;
+      var isSprint = moveData.type === 'Sprint';
+      var sprintFatigued = isSprint && state.sprintCount >= 2;
       var sprintStamina = '';
       var sprintLabel = moveData.label;
       if (isSprint) {
@@ -6259,11 +6719,10 @@ function RunnerScreen({ state, dispatch }) {
         } else if (state.sprintCount === 1) {
           sprintStamina = '\u26A1 ';
         } else {
-          sprintStamina = '\uD83C\uDFC3 ';
-          sprintLabel = 'Run';
+          sprintStamina = '';
         }
       }
-      const btnLabel = sprintStamina + sprintLabel;
+      var btnLabel = sprintStamina + sprintLabel;
 
       runButtons.push(
         React.createElement('button', {
@@ -6272,24 +6731,37 @@ function RunnerScreen({ state, dispatch }) {
           onClick: sprintFatigued ? null : function() { dispatch({ type: 'RUNNER_MOVE', moveType: moveData.type }); },
           disabled: sprintFatigued,
           style: {
-            background: moveColors[idx % 4], flex: 1, padding: '8px 4px', textAlign: 'center', minWidth: '45%',
-            opacity: sprintFatigued ? 0.3 : 1,
+            background: sprintFatigued ? '#555' : moveColors[idx % 4], flex: 1, padding: '8px 4px', textAlign: 'center', minWidth: '45%',
+            opacity: sprintFatigued ? 0.5 : 1,
             cursor: sprintFatigued ? 'not-allowed' : 'pointer',
             position: 'relative'
           }
         },
           React.createElement('div', { style: { fontWeight: 'bold', fontSize: '14px' } }, btnLabel),
-          React.createElement('div', { style: { fontSize: '10px', opacity: 0.8 } }, pct + '% | ' + moveData.description),
-          sprintFatigued ? React.createElement('div', {
-            style: {
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'rgba(239, 68, 68, 0.7)', fontSize: '13px', fontWeight: 'bold',
-              pointerEvents: 'none'
-            }
-          }, 'FATIGUED') : null
+          React.createElement('div', { style: { fontSize: '10px', opacity: 0.8 } },
+            sprintFatigued ? 'Gassed' : pct + '% | ' + moveData.description
+          )
         )
       );
+      // Add Run button alongside when Sprint is fatigued
+      if (sprintFatigued) {
+        var runResult2 = calculateRunSuccess('HitTheHole', state.carrierXY, state.currentDefenderPos, state.runMoves, state.difficulty);
+        var runPct = Math.round((runResult2.rate || 0.5) * 100);
+        runButtons.push(
+          React.createElement('button', {
+            key: 'rm-run-alt',
+            className: 'btn',
+            onClick: function() { dispatch({ type: 'RUNNER_MOVE', moveType: 'HitTheHole' }); },
+            style: {
+              background: '#16a34a', flex: 1, padding: '8px 4px', textAlign: 'center', minWidth: '45%',
+              position: 'relative'
+            }
+          },
+            React.createElement('div', { style: { fontWeight: 'bold', fontSize: '14px' } }, '\uD83C\uDFC3 Run'),
+            React.createElement('div', { style: { fontSize: '10px', opacity: 0.8 } }, runPct + '% | Push forward')
+          )
+        );
+      }
     })(ml, mi, successPct);
   }
 
@@ -6319,6 +6791,12 @@ function RunnerScreen({ state, dispatch }) {
       }, 'YAC') : null
     ),
     defWarning,
+    (state.autoTackleTimer || 0) > 5 ? React.createElement('div', {
+      style: {
+        textAlign: 'center', fontSize: '12px', color: '#ef4444', fontWeight: 'bold',
+        marginBottom: '4px', animation: 'pulse 0.6s ease-in-out infinite'
+      }
+    }, 'MOVE NOW! Auto-tackle in ' + (15 - (state.autoTackleTimer || 0)) + '...') : null,
     React.createElement('div', {
       style: { display: 'flex', flexWrap: 'wrap', gap: '8px' }
     }, runButtons)
@@ -6462,33 +6940,25 @@ function ResultScreen({ state, dispatch }) {
 function CommentaryOverlay({ state, dispatch }) {
   if (!state.showCommentary) return null;
 
-  const danLine = state.danComment || '';
-  const kikiLine = state.kikiComment || '';
-  const useKikiTeach = state.difficulty === 'practice' || state.difficulty === 'preseason';
+  var danLine = state.danComment || '';
+  var kikiLine = state.kikiComment || '';
 
-  return React.createElement('div', { className: 'commentary-panel' },
-    React.createElement('div', {
-      style: {
-        fontWeight: 'bold', fontSize: '12px', color: '#f5a623', marginBottom: '6px',
-        borderBottom: '2px solid gold', paddingBottom: '4px'
-      }
-    }, "ANNOUNCER'S BOOTH"),
-    danLine ? React.createElement('div', { className: 'dan-line' },
+  return React.createElement('div', {
+    style: {
+      position: 'absolute', bottom: '8px', left: '8px', right: '8px',
+      background: 'rgba(0,0,0,0.65)', borderRadius: '6px',
+      padding: '6px 10px', zIndex: 15, pointerEvents: 'none',
+      fontSize: '12px', lineHeight: '1.4'
+    }
+  },
+    danLine ? React.createElement('div', { style: { color: '#ccc' } },
       React.createElement('span', { style: { color: '#4a9eff', fontWeight: 'bold' } }, 'Dan: '),
       danLine
     ) : null,
-    kikiLine ? React.createElement('div', { className: 'kiki-line', style: { fontStyle: 'italic', color: '#f5a623' } },
+    kikiLine ? React.createElement('div', { style: { fontStyle: 'italic', color: '#f5a623', marginTop: '2px' } },
       React.createElement('span', { style: { fontWeight: 'bold' } }, 'Kiki: '),
       kikiLine
-    ) : null,
-    React.createElement('button', {
-      onClick: function() { dispatch({ type: 'DISMISS_COMMENTARY' }); },
-      style: {
-        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-        color: '#ccc', cursor: 'pointer', fontSize: '12px', padding: '4px 12px',
-        borderRadius: '4px', marginTop: '8px', display: 'block', width: '100%'
-      }
-    }, 'Dismiss')
+    ) : null
   );
 }
 
@@ -6626,7 +7096,12 @@ function FourthDownScreen({ state, dispatch }) {
       },
         React.createElement('div', { style: { fontWeight: 'bold' } }, '\u{1F525} GO FOR IT'),
         React.createElement('div', { style: { fontSize: '11px', opacity: 0.8 } }, 'Risky! Convert or turn it over.')
-      )
+      ),
+      React.createElement('button', {
+        className: 'btn',
+        onClick: function() { dispatch({ type: 'FOURTH_DOWN_BACK' }); },
+        style: { background: '#555', padding: '10px', textAlign: 'center', marginTop: '4px' }
+      }, '\u2190 Back')
     )
   );
 }
@@ -6888,8 +7363,8 @@ function GameOverScreen({ state, dispatch }) {
 function PracticeOverlay({ state, dispatch }) {
   if (state.difficulty !== 'practice') return null;
 
-  // Determine which overlay to show based on phase
-  let overlayId = null;
+  // Determine which hint to show based on phase
+  var overlayId = null;
   if (state.phase === 'MENU' && !state.overlaysSeen.welcome) overlayId = 'welcome';
   else if (state.phase === 'PLAY_SELECT' && !state.overlaysSeen.playSelect) overlayId = 'playSelect';
   else if (state.phase === 'PRESNAP' && !state.overlaysSeen.presnap) overlayId = 'presnap';
@@ -6899,17 +7374,23 @@ function PracticeOverlay({ state, dispatch }) {
 
   if (!overlayId) return null;
 
-  const overlayData = PRACTICE_OVERLAYS[overlayId];
+  var overlayData = PRACTICE_OVERLAYS[overlayId];
   if (!overlayData) return null;
 
-  return React.createElement('div', { className: 'practice-overlay' },
-    React.createElement('h3', null, overlayData.title),
-    React.createElement('p', null, overlayData.text),
-    React.createElement('button', {
-      className: 'btn btn-primary',
-      onClick: function() { dispatch({ type: 'DISMISS_OVERLAY', overlayId: overlayId }); },
-      style: { width: '100%', marginTop: '12px' }
-    }, 'GOT IT')
+  // Auto-dismiss: any game-advancing action in the reducer clears this
+  // Teaching hint: small translucent text at top of field, no button
+  return React.createElement('div', {
+    style: {
+      position: 'fixed', top: '56px', left: '50%', transform: 'translateX(-50%)',
+      maxWidth: '420px', width: '90%', zIndex: 210,
+      background: 'rgba(0,0,20,0.20)', borderRadius: '8px', padding: '10px 14px',
+      color: 'rgba(255,255,255,0.7)', fontSize: '13px', lineHeight: '1.4',
+      pointerEvents: 'none', textAlign: 'center',
+      animation: 'fadeIn 0.4s ease'
+    }
+  },
+    React.createElement('span', { style: { fontWeight: 'bold', color: 'rgba(59,130,246,0.8)' } }, overlayData.title + ' '),
+    overlayData.text
   );
 }
 
@@ -7114,13 +7595,23 @@ function App() {
 
   // THROW_RESOLVE: after ball flight animation (600ms)
   React.useEffect(function() {
-    if (state.ballInFlight && state.ballFlightTarget && !state.isPaused) {
+    if (state.ballInFlight && state.ballFlightTarget && !state.isPaused && state.phase !== 'KICK_FLIGHT') {
       const timer = setTimeout(function() {
         dispatch({ type: 'THROW_RESOLVE' });
       }, 600);
       return function() { clearTimeout(timer); };
     }
-  }, [state.ballInFlight, state.ballFlightTarget, state.isPaused]);
+  }, [state.ballInFlight, state.ballFlightTarget, state.isPaused, state.phase]);
+
+  // KICK_FLIGHT: ball flight animation delay (1200ms)
+  React.useEffect(function() {
+    if (state.phase === 'KICK_FLIGHT' && !state.isPaused) {
+      var timer = setTimeout(function() {
+        dispatch({ type: 'KICK_RESOLVE' });
+      }, 1200);
+      return function() { clearTimeout(timer); };
+    }
+  }, [state.phase, state.isPaused]);
 
   // ANIMATION_TICK: 200ms interval during active play phases
   React.useEffect(function() {
@@ -7179,9 +7670,13 @@ function App() {
   }
 
   if (phase === 'CPU_DRIVING') {
-    var currentPlay = (state.cpuDrivePlays && state.cpuDrivePlays.length > 0)
-      ? state.cpuDrivePlays[state.cpuDrivePlayIndex || 0]
-      : 'Opponent driving...';
+    var cpuPlayIdx = state.cpuDrivePlayIndex || 0;
+    var cpuPlays = state.cpuDrivePlays || [];
+    var visiblePlays = [];
+    for (var cpi = 0; cpi <= cpuPlayIdx && cpi < cpuPlays.length; cpi++) {
+      visiblePlays.push(cpuPlays[cpi]);
+    }
+    if (visiblePlays.length === 0) visiblePlays.push('Opponent driving...');
     return React.createElement('div', { className: 'game-container' },
       React.createElement(Scoreboard, { state: state, dispatch: dispatch }),
       React.createElement('div', {
@@ -7194,12 +7689,22 @@ function App() {
           style: { color: '#ef4444', fontSize: '14px', fontWeight: 'bold', marginBottom: '12px', opacity: 0.7 }
         }, 'OPPONENT POSSESSION'),
         React.createElement('div', {
-          key: 'play-' + (state.cpuDrivePlayIndex || 0),
-          style: {
-            color: '#fbbf24', fontSize: '20px', fontWeight: 'bold',
-            animation: 'fadeIn 0.3s ease-in'
-          }
-        }, currentPlay)
+          style: { display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '60vh', overflowY: 'auto' }
+        },
+          visiblePlays.map(function(playText, pi) {
+            var isLatest = pi === visiblePlays.length - 1;
+            return React.createElement('div', {
+              key: 'cpuplay-' + pi,
+              style: {
+                color: isLatest ? '#fbbf24' : '#888',
+                fontSize: isLatest ? '18px' : '14px',
+                fontWeight: isLatest ? 'bold' : 'normal',
+                animation: isLatest ? 'fadeIn 0.3s ease-in' : 'none',
+                fontFamily: 'monospace'
+              }
+            }, playText);
+          })
+        )
       )
     );
   }
@@ -7249,6 +7754,14 @@ function App() {
       break;
     case 'CONTACT':
       panelContent = React.createElement(ContactScreen, { state: state, dispatch: dispatch });
+      break;
+    case 'KICK_FLIGHT':
+      panelContent = React.createElement('div', {
+        style: {
+          textAlign: 'center', padding: '20px', fontSize: '24px', fontWeight: 'bold',
+          color: '#f5a623', animation: 'pulse 0.6s ease-in-out infinite'
+        }
+      }, '\uD83C\uDFC8 KICK IS UP...');
       break;
     case 'RESULT':
       panelContent = React.createElement(ResultScreen, { state: state, dispatch: dispatch });
